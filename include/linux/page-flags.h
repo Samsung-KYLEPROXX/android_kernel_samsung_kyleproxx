@@ -111,6 +111,7 @@ enum pageflags {
 #ifdef CONFIG_CMA
 	PG_cma,			/* Sticky flag to track CMA pages */
 #endif
+	PG_readahead,		/* page in a readahead window */
 	__NR_PAGEFLAGS,
 
 	/* Filesystems */
