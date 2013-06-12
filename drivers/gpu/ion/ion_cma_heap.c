@@ -107,6 +107,10 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 		sg_set_page(sg, page, PAGE_SIZE * n_pages, 0);
 	}
 
+	if (ion_cma_get_sgtable
+	    (dev, info->table, info->cpu_addr, info->handle, len))
+		goto free_table;
+
 	/* keep this for memory release */
 	buffer->priv_virt = info;
 	dev_dbg(dev, "Allocate buffer %p\n", buffer);
