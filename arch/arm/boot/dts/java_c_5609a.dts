@@ -1,21 +1,21 @@
-/* Java_c_5606 Dts file */
+/* Java_c_5609a Dts file */
 
 /dts-v1/;
 
 /include/ "java.dtsi"
-/include/ "java_bcmpmu_c_lc1.dtsi"
+/include/ "java_bcmpmu_c_5609a.dtsi"
 
 / {
-	model = "Java lc1 4Gb";
+	model = "Java 5609a";
 	compatible = "bcm,java";
 
 	chosen {
-		bootargs = "console=ttyS0,115200n8 mem=480M gpt androidboot.console=ttyS0 crash_ramdump=1 logbuf_nocache=1";
+		bootargs = "console=ttyS0,115200n8 mem=992M gpt androidboot.console=ttyS0 crash_ramdump=1 logbuf_nocache=1";
 	};
 
 	memory@82000000 {
 		device_type = "memory";
-		reg = <0x82000000 0x1e000000>; /* 480 MB */
+		reg = <0x82000000 0x2e000000>; /* 736 MB */
 	};
 
 	rtc-kona {
@@ -82,7 +82,7 @@
                         compatible = "bcm,bma222_accl";
                         reg = <0x18>;
                         gpio-irq-pin = <0xFFFFFFFF>;
-			orientation  = <12>;
+			orientation  = <3>;
 
                 };
 
@@ -106,18 +106,15 @@
 		fs-ref-frequency = <13000000>;
 		hs-ref-frequency = <104000000>;
 
-		FocalTech-Ft5306@46 {
-			compatible = "bcm,FocalTech-Ft5306";
-			reg = <0x38>;
+		Goodix-TS@5D {
+			compatible = "bcm,Goodix-TS";
+			reg = <0x5D>;
 			gpio-irq-pin = <73>;
 			gpio-reset-pin = <70>;
-			gpio-wakeup-pin = <70>;
-			x-max-value = <480>;
-			y-max-value = <854>;
-			use-irq = <1>;
-			power = "camldo2";
+			x-max-value = <540>;
+			y-max-value = <960>;
 			auto_update_fw = <0>;
-			vkey_scope = "0x01:139:80:898:160:80:0x01:102:240:898:160:80:0x01:158:400:898:160:80\n";
+			vkey_scope = "0x01:139:120:1010:160:80:0x01:102:240:1010:160:80:0x01:158:360:1010:160:80\n";
 		};
 	};
 
@@ -258,32 +255,7 @@
 	};
 
 	kona-fb {
-		module-name = "HX8379_TM";
-		reg-name = "cam2";
-		rst-gpio = <22>;
-		rst-setup = <700>;	/* 700us */
-		rst-pulse = <20>;	/* 10us */
-		rst-hold = <10000>;	/* 2ms */
-		col-mod-i = <3>;
-		col-mod-o = <2>;
-		width = <480>;
-		height = <854>;
-		/* rst-active-high */	/* Commented => Active Low */
-		vmode;
-		/* vburst */	/* Non-burst mode */
-		/* te-ctrl; */		/* Tearing Effect Control disabled */
-		fps = <60>;
-		lanes = <2>;
-		cmnd-LP;		/* Commands in LP mode*/
-		hs-bitrate = <352000000>;
-		lp-bitrate = <5000000>;	/* 5mbps */
-		iommu = <&iommu_mm>;
-		iovmm = <&iovmm_mm>;
-		rotation = <0>;
-	};
-
-	kona-fb-2 {
-		module-name = "NT35517";
+		module-name = "HX8389_TM";
 		reg-name = "cam2";
 		rst-gpio = <22>;
 		rst-setup = <700>;	/* 700us */
@@ -300,8 +272,8 @@
 		fps = <60>;
 		lanes = <2>;
 		cmnd-LP;		/* Commands in LP mode*/
-		hs-bitrate = <400000000>;
-		lp-bitrate = <8000000>;	/* 8mbps */
+		hs-bitrate = <420000000>;
+		lp-bitrate = <5000000>;	/* 5mbps */
 		iommu = <&iommu_mm>;
 		iovmm = <&iovmm_mm>;
 		rotation = <0>;
@@ -312,18 +284,20 @@
 		reg = <0x34008000 0x1000>;
 		interrupts = <0 183 4>;
 		chipreg_addr = <0x35004000 0x1000>;
-		thold_size = <4>; /*number of threshold levels*/
+		thold_size = <5>; /*number of threshold levels*/
 		poll_rate_ms = <30000>;
 		hysteresis = <0>;
 		flags = <1>;
 		interval_ms = <5>;
-		/*critical temp is 115*/
-		thold = <70 65 1
-			85 75 1
-			100 90 1
-			115 112 2>;
+		/*sw shdwn temp is 120*/
+		thold = <85 1
+			95 1
+			105 1
+			120 4
+			125 2>;
 		tmon_apb_clk = "tmon_apb";
 		tmon_1m_clk = "tmon_1m_clk";
+		falling = <5>; /*fall back temperature offset*/
 	};
 
 	memc@35008000 {
@@ -392,11 +366,11 @@
 	};
 
 	keypad {
-		row-num = <1>;
+		row-num = <2>;
 		col-num = <2>;
 		row-col-count = <8>;
 		key-name = "Vol Down Key", "Vol Up Key", "unused", "unused",
-			"unused", "unused", "unused", "unused", "unused",
+			"unused", "unused", "unused", "unused", "Key home",
 			"unused", "unused", "unused", "unused", "unused",
 			"unused", "unused", "unused", "unused", "unused",
 			"unused", "unused", "unused", "unused", "unused",
@@ -409,7 +383,7 @@
 			"unused", "unused", "unused", "unused", "unused",
 			"unused", "unused", "unused", "unused", "unused";
 		key-code = <114 115 0 0 0 0 0 0
-			0 0 0 0 0 0 0 0
+			102 0 0 0 0 0 0 0
 			0 0 0 0 0 0 0 0
 			0 0 0 0 0 0 0 0
 			0 0 0 0 0 0 0 0
@@ -428,6 +402,8 @@
 		pwm-period-ns = <50000>; /* ~20000 Hz */
 		pwm-request-label = "backlight";
 		bl-on-delay = <7000>;
+		pwm_pin_name = <39>;	/*GPIO24, enum PIN_NAME defined in chip_pinmux.h*/
+		pwm_pin_reboot_func = <25>;	/*GPIO24, enum PIN_FUNC defined in chip_pinmux.h*/
 	};
 
 	gpio-leds {
