@@ -1035,17 +1035,21 @@ EXPORT_SYMBOL_GPL(__netpoll_cleanup);
 
 void netpoll_cleanup(struct netpoll *np)
 {
-	if (!np->dev)
-		return;
-
 	pr_info("%s\n", __func__);
 
 	rtnl_lock();
+
+	if (!np->dev)
+		goto out;
+
 	__netpoll_cleanup(np);
-	rtnl_unlock();
 
 	dev_put(np->dev);
 	np->dev = NULL;
+
+out:
+	rtnl_unlock();
+
 }
 
 int netpoll_trap(void)
