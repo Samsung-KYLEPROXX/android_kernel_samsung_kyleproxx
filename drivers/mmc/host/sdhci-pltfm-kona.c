@@ -1140,20 +1140,9 @@ static int __devinit sdhci_pltfm_probe(struct platform_device *pdev)
 		/*host->mmc->caps2 |= MMC_CAP2_NO_SLEEP_CMD;*/
 		host->mmc->pm_flags = MMC_PM_KEEP_POWER;
 
-	/*
-	 * This has to be done before sdhci_add_host.
-	 * As soon as we add the host, request
-	 * starts. If we dont enable this here, the
-	 * runtime get and put of sdhci will fallback to
-	 * clk_enable and clk_disable which will conflict
-	 * with the PM runtime when it gets enabled just
-	 * after sdhci_add_host. Now with this, the RPM
-	 * calls will fail until RPM is enabled, but things
-	 * will work well, as we have clocks enabled till the
-	 * probe ends.
-	 */
-
+	/* enable & init runtime power management */
 	dev->runtime_pm_enabled = 1;
+	sdhci_pltfm_runtime_pm_init(dev->dev);
 
 	ret = sdhci_add_host(host);
 	if (ret)
@@ -1162,9 +1151,6 @@ static int __devinit sdhci_pltfm_probe(struct platform_device *pdev)
 	ret = proc_init(pdev);
 	if (ret)
 		goto err_rm_host;
-
-	/* Should be done only after sdhci_add_host */
-	sdhci_pltfm_runtime_pm_init(dev->dev);
 
 	if (dev->devtype == SDIO_DEV_TYPE_SDMMC) {
 		/* support SD card detect interrupts for insert/removal */
