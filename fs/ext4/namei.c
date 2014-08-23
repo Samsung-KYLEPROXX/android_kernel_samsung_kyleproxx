@@ -911,7 +911,7 @@ static struct buffer_head * ext4_find_entry (struct inode *dir,
 				   buffer */
 	int num = 0;
 	ext4_lblk_t  nblocks;
-	int i, err;
+	int i, err = 0;
 	int namelen;
 
 	*res_dir = NULL;
@@ -936,7 +936,11 @@ static struct buffer_head * ext4_find_entry (struct inode *dir,
 		 * return.  Otherwise, fall back to doing a search the
 		 * old fashioned way.
 		 */
-		if (bh || (err != ERR_BAD_DX_DIR))
+		if (err == -ENOENT)
+			return NULL;
+		if (err && err != ERR_BAD_DX_DIR)
+			return ERR_PTR(err);
+		if (bh)
 			return bh;
 		dxtrace(printk(KERN_DEBUG "ext4_find_entry: dx failed, "
 			       "falling back\n"));
@@ -967,6 +971,11 @@ restart:
 				}
 				num++;
 				bh = ext4_getblk(NULL, dir, b++, 0, &err);
+				if (unlikely(err)) {
+					if (ra_max == 0)
+						return ERR_PTR(err);
+					break;
+				}
 				bh_use[ra_max] = bh;
 				if (bh)
 					ll_rw_block(READ | REQ_META | REQ_PRIO,
@@ -1099,6 +1108,8 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, stru
 		bh = ext4_find_entry(dir, &dentry->d_name, &de, NULL);
 #else
 	bh = ext4_find_entry(dir, &dentry->d_name, &de);
+	if (IS_ERR(bh))
+		return (struct dentry *) bh;
 #endif
 	inode = NULL;
 	if (bh) {
@@ -1149,6 +1160,8 @@ struct dentry *ext4_get_parent(struct dentry *child)
 	bh = ext4_find_entry(child->d_inode, &dotdot, &de, NULL);
 #else
 	bh = ext4_find_entry(child->d_inode, &dotdot, &de);
+	if (IS_ERR(bh))
+		return (struct dentry *) bh;
 #endif
 	if (!bh)
 		return ERR_PTR(-ENOENT);
@@ -2226,6 +2239,8 @@ static int ext4_rmdir(struct inode *dir, struct dentry *dentry)
 	bh = ext4_find_entry(dir, &dentry->d_name, &de, NULL);
 #else
 	bh = ext4_find_entry(dir, &dentry->d_name, &de);
+	if (IS_ERR(bh))
+		return PTR_ERR(bh);
 #endif
 	if (!bh)
 		goto end_rmdir;
@@ -2295,6 +2310,8 @@ static int ext4_unlink(struct inode *dir, struct dentry *dentry)
 	bh = ext4_find_entry(dir, &dentry->d_name, &de, NULL);
 #else
 	bh = ext4_find_entry(dir, &dentry->d_name, &de);
+	if (IS_ERR(bh))
+		return PTR_ERR(bh);
 #endif
 	if (!bh)
 		goto end_unlink;
@@ -2515,6 +2532,8 @@ static int ext4_rename(struct inode *old_dir, struct dentry *old_dentry,
 	old_bh = ext4_find_entry(old_dir, &old_dentry->d_name, &old_de, NULL);
 #else
 	old_bh = ext4_find_entry(old_dir, &old_dentry->d_name, &old_de);
+	if (IS_ERR(old_bh))
+		return PTR_ERR(old_bh);
 #endif
 	/*
 	 *  Check for inode number is _not_ due to possible IO errors.
@@ -2532,6 +2551,10 @@ static int ext4_rename(struct inode *old_dir, struct dentry *old_dentry,
 	new_bh = ext4_find_entry(new_dir, &new_dentry->d_name, &new_de, NULL);
 #else
 	new_bh = ext4_find_entry(new_dir, &new_dentry->d_name, &new_de);
+	if (IS_ERR(new_bh)) {
+		retval = PTR_ERR(new_bh);
+		goto end_rename;
+	}
 #endif
 	if (new_bh) {
 		if (!new_inode) {
@@ -2614,8 +2637,10 @@ static int ext4_rename(struct inode *old_dir, struct dentry *old_dentry,
 		old_bh2 = ext4_find_entry(old_dir, &old_dentry->d_name, &old_de2, NULL);
 #else
 		old_bh2 = ext4_find_entry(old_dir, &old_dentry->d_name, &old_de2);
+		if (IS_ERR(old_bh2)) {
+			retval = PTR_ERR(old_bh2);
+		} else if (old_bh2) {
 #endif
-		if (old_bh2) {
 			retval = ext4_delete_entry(handle, old_dir,
 						   old_de2, old_bh2);
 			brelse(old_bh2);
