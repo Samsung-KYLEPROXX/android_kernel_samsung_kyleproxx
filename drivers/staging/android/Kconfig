@@ -87,15 +87,6 @@ config ADAPTIVE_LMK
 
 source "drivers/staging/android/switch/Kconfig"
 
-config ANDROID_INTF_ALARM_DEV
-	bool "Android alarm driver"
-	depends on RTC_CLASS
-	default n
-	help
-	  Provides non-wakeup and rtc backed wakeup alarms based on rtc or
-	  elapsed realtime, and a non-wakeup alarm on the monotonic clock.
-	  Also exports the alarm interface to user-space.
-
 config BCM_RTC_ALARM_BOOT
 	bool "RTC Alarm Boot"
 	depends on RTC_CLASS
