@@ -1,0 +1,16 @@
+#
+# touchkey configuration
+#
+
+config TOUCHSCREEN_CYPRESS_TMA46X
+	tristate "CYPRESS TMA46X I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have Cypress tma46x I2C touchscreen,
+	  such as TMA46x, connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called tma46x.
+
