@@ -462,13 +462,13 @@ void AUDCTRL_EnableTelephony(AUDIO_SOURCE_Enum_t source, AUDIO_SINK_Enum_t sink)
 		callType = VOIF_VT_CALL_NB;
         else if(app == AUDIO_APP_VT_CALL_WB)
 		callType = VOIF_VT_CALL_WB;
-	else if(app == AUDIO_APP_VOICE_CALL_WB || app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
+	else if(app == AUDIO_APP_VOICE_CALL_WB)
 		callType = VOIF_VOICE_CALL_WB;
-	else if(app == AUDIO_APP_VOICE_CALL || app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
+	else if(app == AUDIO_APP_VOICE_CALL)
 		callType = VOIF_VOICE_CALL_NB;
 
 	VoIF_init(mode, hstype, callType);
-	// VoIF_setCallType(callType);		// To avoid kernel panic
+	VoIF_setCallType(callType);
 
 	gOldVol_index = gVol_index;
 	VoIF_volumeSetting(gVol_index);
@@ -485,7 +485,7 @@ void AUDCTRL_EnableTelephony(AUDIO_SOURCE_Enum_t source, AUDIO_SINK_Enum_t sink)
 ****************************************************************************/
 void AUDCTRL_DisableTelephony(void)
 {
-	aTrace(LOG_AUDIO_CNTLR, "AUDCTRL_DisableTelephony bInVoiceCall = %d\n", bInVoiceCall);
+	aTrace(LOG_AUDIO_CNTLR, "AUDCTRL_DisableTelephony\n");
 
 	/* continues speech playback when end the phone call.
 	   continues speech recording when end the phone call.
@@ -533,10 +533,6 @@ void AUDCTRL_Telephony_RateChange(unsigned int sample_rate)
 	AudioApp_t pre_app, app;
 	AudioMode_t mode;
 	int bNeedDualMic;
-#ifdef CONFIG_ENABLE_VOIF
-	VoIF_CallType_t callType = VOIF_NO_CALL;
-#endif
-
 	aTrace(LOG_AUDIO_CNTLR, "%s sample_rate %d-->%d",
 		__func__, voiceCallSampleRate, sample_rate);
 
@@ -568,16 +564,13 @@ void AUDCTRL_Telephony_RateChange(unsigned int sample_rate)
 
 #ifdef CONFIG_ENABLE_VOIF
 		if (app == AUDIO_APP_VT_CALL)
-			callType = VOIF_VT_CALL_NB;
+			VoIF_setCallType(VOIF_VT_CALL_NB);
         	else if(app == AUDIO_APP_VT_CALL_WB)
-			callType = VOIF_VT_CALL_WB;
-		else if(app == AUDIO_APP_VOICE_CALL_WB || app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
-			callType = VOIF_VOICE_CALL_WB;
-		else if(app == AUDIO_APP_VOICE_CALL || app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
-			callType = VOIF_VOICE_CALL_NB;
-
-		if (callType != VoIF_getCallType())
-			VoIF_setCallType(callType);
+			VoIF_setCallType(VOIF_VT_CALL_WB);        
+		else if(app == AUDIO_APP_VOICE_CALL_WB)
+                    VoIF_setCallType(VOIF_VOICE_CALL_WB);
+		else if(app == AUDIO_APP_VOICE_CALL)
+                    VoIF_setCallType(VOIF_VOICE_CALL_NB);
 #endif
 
 		AUDCTRL_Telephony_HW_16K(mode);
@@ -740,9 +733,7 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 	AudioMode_t mode;
 	AudioApp_t app = AUDIO_APP_VOICE_CALL;
 	int bNeedDualMic = FALSE;
-	int bTempmuteVoiceCall = bmuteVoiceCall;
 #ifdef CONFIG_ENABLE_VOIF
-	VoIF_CallType_t callType = VOIF_NO_CALL;
 	VoIF_HeadsetType_t hstype = VOIF_OTHER_TYPE;
 #endif
 
@@ -813,7 +804,6 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 			wait_before_pmu_off = DELAY_BEFORE_PMU_OFF;
 		}
 
-		AUDCTRL_SetTelephonyMicMute(AUDIO_SOURCE_UNDEFINED, 1);
 		powerOnExternalAmp(voiceCallSpkr, TelephonyUse,
 				FALSE, FALSE);
 		wait_before_pmu_off = 0;
@@ -842,8 +832,6 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 	if (voiceCallSpkr != sink || force == true) {
 		powerOnExternalAmp(sink, TelephonyUse,
 				TRUE, FALSE);
-		if (!bTempmuteVoiceCall)
-			AUDCTRL_SetTelephonyMicMute(AUDIO_SOURCE_UNDEFINED, 0);
 
 		if (force == true) {
 			AUDCTRL_SetTelephonySpkrMute(AUDIO_SINK_UNDEFINED, 0);
@@ -894,17 +882,20 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 	
 	VoIF_modeChange(mode, hstype);
 
+	if (VoIF_getCallType() != VOIF_VT_CALL_NB && VoIF_getCallType() != VOIF_VT_CALL_WB)
+	{
 	    if(app == AUDIO_APP_VT_CALL)
-		callType = VOIF_VT_CALL_NB;
+                VoIF_setCallType(VOIF_VT_CALL_NB);
 	    else if(app == AUDIO_APP_VT_CALL_WB)
-		callType = VOIF_VT_CALL_WB;
-	else if(app == AUDIO_APP_VOICE_CALL_WB || app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
-		callType = VOIF_VOICE_CALL_WB;
-	else if(app == AUDIO_APP_VOICE_CALL || app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
-		callType = VOIF_VOICE_CALL_NB;
-
-	if (callType != VoIF_getCallType())
-		VoIF_setCallType(callType);
+                VoIF_setCallType(VOIF_VT_CALL_WB);
+	}
+	else if(VoIF_getCallType() != VOIF_VOICE_CALL_NB && VoIF_getCallType() != VOIF_VOICE_CALL_WB)
+	{
+	    if(app == AUDIO_APP_VOICE_CALL)
+		VoIF_setCallType(VOIF_VOICE_CALL_NB);
+	    else if(app == AUDIO_APP_VOICE_CALL_WB)
+		VoIF_setCallType(VOIF_VOICE_CALL_WB);
+	}
 #endif
 }
 
@@ -962,7 +953,7 @@ void AUDCTRL_SetTelephonySpkrVolume(AUDIO_SINK_Enum_t speaker,
 		if (telephony_dl_gain_dB < -(p->voice_volume_max))
 			telephony_dl_gain_dB = -(p->voice_volume_max);
 
-		if((app != AUDIO_APP_LOOPBACK) || (mode != AUDIO_MODE_HEADSET))
+		if((app != AUDIO_APP_LOOPBACK) || (mode != AUDIO_SINK_HEADSET))
 		{
 			user_vol_setting[app][mode].L = volume;
 			user_vol_setting[app][mode].R = volume;      
@@ -1215,11 +1206,7 @@ void AUDCTRL_RemoveAudioApp(AudioApp_t audio_app)
 		sAudioAppStates[audio_app] = FALSE;
 
 	if (audio_app == AUDIO_APP_VOICE_CALL)
-	{
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB] = FALSE;
-		sAudioAppStates[AUDIO_APP_VOICE_CALL_EXTRAVOL] = FALSE;
-		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB_EXTRAVOL] = FALSE;
-	}
 
 	aTrace(LOG_AUDIO_CNTLR, "%s Removed audio_app=%d", __func__,
 			audio_app);
@@ -1985,8 +1972,8 @@ void AUDCTRL_DisablePlay(AUDIO_SOURCE_Enum_t source,
 		}
 	}
 
-	playbackPathID = 0;
-	pathIDTuning = 0;
+	playbackPathID = NULL;
+	pathIDTuning = NULL;
 
 	if (audioPathResetPending && csl_caph_hwctrl_allPathsDisabled()) {
 		AUDDRV_CPResetCleanup();
@@ -2193,9 +2180,9 @@ void AUDCTRL_SetPlayVolume(AUDIO_SOURCE_Enum_t source,
 			if (mixer == CSL_CAPH_SRCM_STEREO_CH2_L
 				|| mixer == CSL_CAPH_SRCM_STEREO_CH2_R) {
 				/*mono output*/
-				if (mixInCh == CSL_CAPH_SRCM_STEREO_CH5 ||
-					mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
-					mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
+				if (mixInCh == CAPH_SRCM_CH5 ||
+					mixInCh == CAPH_SRCM_PASSCH1 ||
+					mixInCh == CAPH_SRCM_PASSCH2) {
 					/*only on stereo inputs.*/
 					users_gain[AUDPATH_FM].L = users_gain[AUDPATH_FM].L - 600;
 					users_gain[AUDPATH_FM].R = users_gain[AUDPATH_FM].R - 600;
@@ -2350,9 +2337,9 @@ void AUDCTRL_SetPlayVolume(AUDIO_SOURCE_Enum_t source,
 		if (mixer == CSL_CAPH_SRCM_STEREO_CH2_L
 			|| mixer == CSL_CAPH_SRCM_STEREO_CH2_R) {
 			/*mono output*/
-			if (mixInCh == CSL_CAPH_SRCM_STEREO_CH5 ||
-				mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
-				mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
+			if (mixInCh == CAPH_SRCM_CH5 ||
+				mixInCh == CAPH_SRCM_PASSCH1 ||
+				mixInCh == CAPH_SRCM_PASSCH2) {
 				/*only on stereo inputs.*/
 				mixInGain = mixInGain - 600;
 				mixInGain_r = mixInGain_r - 600;
@@ -2468,9 +2455,9 @@ void AUDCTRL_SetPlayMute(AUDIO_SOURCE_Enum_t source,
 				if (mixer == CSL_CAPH_SRCM_STEREO_CH2_L
 					|| mixer == CSL_CAPH_SRCM_STEREO_CH2_R) {
 					/*mono output*/
-					if (mixInCh == CSL_CAPH_SRCM_STEREO_CH5 ||
-						mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
-						mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
+					if (mixInCh == CAPH_SRCM_CH5 ||
+						mixInCh == CAPH_SRCM_PASSCH1 ||
+						mixInCh == CAPH_SRCM_PASSCH2) {
 						/*only on stereo inputs.*/
 						mixInGain = mixInGain - 600;
 						mixInGainR = mixInGainR - 600;
@@ -3403,9 +3390,7 @@ static void AUDCTRL_RemoveVoiceApp(AudioApp_t app)
 		app == AUDIO_APP_VT_CALL ||
 		app == AUDIO_APP_VT_CALL_WB ||
 		app == AUDIO_APP_VOIP ||
-		app == AUDIO_APP_VOIP_INCOMM ||
-		app == AUDIO_APP_VOICE_CALL_EXTRAVOL ||
-		app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL) {
+		app == AUDIO_APP_VOIP_INCOMM) {
 		sAudioAppStates[AUDIO_APP_VOICE_CALL] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB] = FALSE;
 		sAudioAppStates[AUDIO_APP_LOOPBACK] = FALSE;
@@ -3413,8 +3398,6 @@ static void AUDCTRL_RemoveVoiceApp(AudioApp_t app)
 		sAudioAppStates[AUDIO_APP_VT_CALL_WB] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOIP] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOIP_INCOMM] = FALSE;
-		sAudioAppStates[AUDIO_APP_VOICE_CALL_EXTRAVOL] = FALSE;
-		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB_EXTRAVOL] = FALSE;
 	}
 }
 
@@ -3493,16 +3476,12 @@ static void AUDCTRL_FinalizeAudioApp(AudioMode_t mode)
 			app = AUDIO_APP_VOICE_CALL;
 			else if (app == AUDIO_APP_VT_CALL_WB)
 				app = AUDIO_APP_VT_CALL;
-			else if (app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
-				app = AUDIO_APP_VOICE_CALL_EXTRAVOL;
 		}
 		if (AUDCTRL_IsBTMWB() == TRUE) {
 			if (app == AUDIO_APP_VOICE_CALL)
 			app = AUDIO_APP_VOICE_CALL_WB;
 			else if (app == AUDIO_APP_VT_CALL)
 				app = AUDIO_APP_VT_CALL_WB;
-			else if (app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
-				app = AUDIO_APP_VOICE_CALL_WB_EXTRAVOL;
 		}
 	} else {
 		if (voiceCallSampleRate == AUDIO_SAMPLING_RATE_16000) {
@@ -3510,15 +3489,11 @@ static void AUDCTRL_FinalizeAudioApp(AudioMode_t mode)
 			app = AUDIO_APP_VOICE_CALL_WB;
 			else if (app == AUDIO_APP_VT_CALL)
 				app = AUDIO_APP_VT_CALL_WB;
-			else if (app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
-				app = AUDIO_APP_VOICE_CALL_WB_EXTRAVOL;
 		} else if (voiceCallSampleRate == AUDIO_SAMPLING_RATE_8000) {
 			if (app == AUDIO_APP_VOICE_CALL_WB)
 			app = AUDIO_APP_VOICE_CALL;
 			else if (app == AUDIO_APP_VT_CALL_WB)
 				app = AUDIO_APP_VT_CALL;
-			else if (app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
-				app = AUDIO_APP_VOICE_CALL_EXTRAVOL;
 		}
 	}
 	AUDCTRL_SaveAudioApp(app);

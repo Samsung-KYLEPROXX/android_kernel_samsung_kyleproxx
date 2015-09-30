@@ -17,16 +17,9 @@
 
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DMSP -DFUSE_DUAL_PROCESSOR_ARCHITECTURE -DDEVELOPMENT_ONLY -D_RHEA_
 #the options below are used by capi headers
+#subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL -DCONFIG_ENABLE_VOIF -DENABLE_DIAMOND_SOLUTION -DVOICESOLUTION_DUMP
 #subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DCONFIG_LOUDMIC_FEATURE
-ifdef CONFIG_MACH_HAWAII_SS_KYLEPRO
-subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL -DCONFIG_ENABLE_VOIF -DENABLE_DIAMOND_SOLUTION
-else
-ifdef CONFIG_MACH_HAWAII_SS_KYLEPRODS
-subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL -DCONFIG_ENABLE_VOIF -DENABLE_DIAMOND_SOLUTION
-else
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL
-endif
-endif
 #the options below are used by audio
 ifdef CONFIG_BCM_MODEM
 #this feature is required only for voice features which has dependency on CP and DSP. Enabled them only when MODEM is enabled
@@ -66,19 +59,10 @@ subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/plat-kona/include/plat/
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/plat-kona/include/mach
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./drivers/char/broadcom/
 
-ifdef CONFIG_ARCH_HAWAII
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-hawaii/include/mach/rdb_A0/
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-hawaii/
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-hawaii/include/
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-hawaii/include/mach/
-endif
-
-ifdef CONFIG_ARCH_JAVA
-subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-java/include/mach/rdb_A0/
-subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-java/
-subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-java/include/
-subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/mach-java/include/mach/
-endif
 
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/plat-kona/include/plat/chal/
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -I./arch/arm/plat-kona/include/plat/csl/

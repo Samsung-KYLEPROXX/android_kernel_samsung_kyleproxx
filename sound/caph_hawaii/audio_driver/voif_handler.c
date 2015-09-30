@@ -70,8 +70,6 @@ static int lock_init;
 static short isLoopbackMode = 0;
 static int curVolIndex = 4;
 
-static int isCheckInit = 0;
-
 #define	VOICE_NB_FRAME	160
 #define	VOICE_WB_FRAME	320
 
@@ -91,8 +89,7 @@ typedef struct
     Int16 isInit;
     
 #ifdef ENABLE_DIAMOND_SOLUTION    
-    void (*pDiamondVoiceExe)(short*, short*, short*, int);
-    void (*pDiamondVoice_Init)(int);
+    void (*pDiamondVoiceExe)(void);
     short (*pDiamondVoice_Config)(int, int, short *, short *, short *, const short*, int);
     void (*pDiamondVoice_Volume_Config)(int, int, int);
     short DiamondVoice_Mode;
@@ -114,8 +111,7 @@ static TVoIF_CallBackData sgCallbackData;
 
 short DiamondVoiceDhaDataChk = 0;
 short DiamodVoiceDhaParams[DHA_PARAM_MAX] = {0};
-extern void DiamondVoice_Exe(short*, short*, short*);
-extern void DiamondVoice_Init(int);
+extern void DiamondVoice_Exe(void);
 extern short DiamondVoice_Config(int , int, Int16 *, Int16 *, Int16 *, const Int16*, int);
 extern void DiamondVoice_Volume_Config(int, int, int);
 #endif
@@ -248,13 +244,9 @@ static void VOIF_CB_Fxn(
 	UInt32 sampleCount,
 	UInt8 isCall16K)
 {
-
-	Int16 dv_lenght = 0;	
-
 #ifdef VOICESOLUTION_DUMP
 #ifdef ENABLE_INJECTION
     Int16 isMax = 0;
-
     if (sgInjectData.flag ==1 && index<=MAX_INJECT )
     {
         if(index == MAX_INJECT)
@@ -273,14 +265,10 @@ static void VOIF_CB_Fxn(
 #endif
 #endif
 
-#ifdef ENABLE_DIAMOND_SOLUTION
-	if (1==isCheckInit)
-		return;
-	
+#ifdef ENABLE_DIAMOND_SOLUTION    
     if ( sgCallbackData.DiamondVoice_Mode != 0x00 && (voifCallType == VOIF_VOICE_CALL_NB || voifCallType == VOIF_VOICE_CALL_WB) )
 #endif        
-    {      
-#if 0
+    {            
         if(isCall16K == 0 && voifCallType == VOIF_VOICE_CALL_NB)
         {
             memcpy(sgCallbackData.pUldata_nb, ulData, sizeof(Int16) * VOICE_NB_FRAME);
@@ -291,23 +279,14 @@ static void VOIF_CB_Fxn(
             memcpy(sgCallbackData.pUldata_wb, ulData, sizeof(Int16) * VOICE_WB_FRAME);
             memcpy(sgCallbackData.pDldata_wb, dlData, sizeof(Int16) * VOICE_WB_FRAME);
         }
+
+#ifdef ENABLE_DIAMOND_SOLUTION    
+        sgCallbackData.pDiamondVoiceExe();
 #endif
-
-#ifdef ENABLE_DIAMOND_SOLUTION
-
-		if(voifCallType == VOIF_VOICE_CALL_NB)
-			dv_lenght = 160;
-		else if(voifCallType == VOIF_VOICE_CALL_WB)
-			dv_lenght = 320;
-		
-       	sgCallbackData.pDiamondVoiceExe(dlData, ulData, dlData, dv_lenght);
-#endif
-
 #ifdef ENABLE_NXPEX_SOLUTION 
-        sgCallbackData.pLVVEFS_Process(ulData, dlData, sampleCount, isCall16K);
+        sgCallbackData.pLVVEFS_Process(sgCallbackData.pUldata_nb, sgCallbackData.pDldata_nb, sampleCount, isCall16K);
 #endif
 
-#if 0
         if(isCall16K == 0 && voifCallType == VOIF_VOICE_CALL_NB)
         {
             memcpy(dlData, sgCallbackData.pDlOutput_nb_buf, sizeof(Int16) * VOICE_NB_FRAME);
@@ -318,7 +297,6 @@ static void VOIF_CB_Fxn(
             memcpy(dlData, sgCallbackData.pDlOutput_wb_buf, sizeof(Int16) * VOICE_WB_FRAME);
             memcpy(ulData, sgCallbackData.pUldata_wb, sizeof(Int16) * VOICE_WB_FRAME);
         }
-#endif
 
 #ifdef  VOICESOLUTION_DUMP
 #ifdef ENABLE_INJECTION
@@ -378,9 +356,6 @@ static void VOIF_CB_Fxn(
 #endif
 #endif
 /* Start voif */
-
-extern int dvs_init_check=0;
-
 void VoIF_init(AudioMode_t mode, VoIF_HeadsetType_t hstype, VoIF_CallType_t callType)
 {
 #ifdef CONFIG_ENABLE_VOIF    
@@ -397,8 +372,7 @@ void VoIF_init(AudioMode_t mode, VoIF_HeadsetType_t hstype, VoIF_CallType_t call
         lock_init = 1;
     }
     wake_lock(&voif_lock);
-#ifdef ENABLE_DIAMOND_SOLUTION
-	sgCallbackData.pDiamondVoice_Init = symbol_get(DiamondVoice_Init);
+#ifdef ENABLE_DIAMOND_SOLUTION    
     sgCallbackData.pDiamondVoice_Config = symbol_get(DiamondVoice_Config);
     sgCallbackData.pDiamondVoiceExe = symbol_get(DiamondVoice_Exe);
     sgCallbackData.pDiamondVoice_Volume_Config = symbol_get(DiamondVoice_Volume_Config);
@@ -416,24 +390,17 @@ void VoIF_init(AudioMode_t mode, VoIF_HeadsetType_t hstype, VoIF_CallType_t call
     voifHeadsetType = hstype;
     voifCallType = callType;
 
-
-	dvs_init_check = -1;
-
-/*
 #ifdef ENABLE_DIAMOND_SOLUTION       
     if(callType == VOIF_VOICE_CALL_WB || callType == VOIF_VT_CALL_WB)
     {
-		sgCallbackData.pDiamondVoice_Init(VOIF_WIDE_BAND);
         sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(mode, curVolIndex, sgCallbackData.pDldata_wb, sgCallbackData.pUldata_wb, sgCallbackData.pDlOutput_wb_buf, DiamodVoiceDhaParams, VOIF_WIDE_BAND);
     }
     else
     {
-   		sgCallbackData.pDiamondVoice_Init(VOIF_NARROW_BAND);
         sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(mode, curVolIndex, sgCallbackData.pDldata_nb, sgCallbackData.pUldata_nb, sgCallbackData.pDlOutput_nb_buf, DiamodVoiceDhaParams, VOIF_NARROW_BAND);
     }
     printk("\n===  VoIF_init  === AudioMode_t : %d, DV Mode : %d, callType : 0x%x, curVolIndex : %d \n", mode, sgCallbackData.DiamondVoice_Mode, voifCallType, curVolIndex);
 #endif
-*/
 
 #ifdef ENABLE_NXPEX_SOLUTION
     //sgCallbackData.pLVVE_Set_Device(mode);
@@ -504,8 +471,7 @@ void VoIF_Deinit()
 #endif
 
 #ifdef CONFIG_ENABLE_VOIF    
-#ifdef ENABLE_DIAMOND_SOLUTION
-	symbol_put(DiamondVoice_Init);
+#ifdef ENABLE_DIAMOND_SOLUTION    
     symbol_put(DiamondVoice_Config);
     symbol_put(DiamondVoice_Exe);
     symbol_put(DiamondVoice_Volume_Config);
@@ -529,7 +495,7 @@ void VoIF_Deinit()
 void VoIF_modeChange(AudioMode_t mode, VoIF_HeadsetType_t hstype)
 {
     if(!sgCallbackData.isInit)
-	{
+{
         printk("\n===============VoIF_modeChange()  VoIF_init is not called =============== \n");
         return;
     }
@@ -544,10 +510,8 @@ void VoIF_modeChange(AudioMode_t mode, VoIF_HeadsetType_t hstype)
         sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(mode, curVolIndex, sgCallbackData.pDldata_wb, sgCallbackData.pUldata_wb, sgCallbackData.pDlOutput_wb_buf, DiamodVoiceDhaParams, VOIF_WIDE_BAND);
     else
         sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(mode, curVolIndex, sgCallbackData.pDldata_nb, sgCallbackData.pUldata_nb, sgCallbackData.pDlOutput_nb_buf, DiamodVoiceDhaParams, VOIF_NARROW_BAND);
-	
     printk("\n===  VoIF_modeChange - AudioMode_t Mode : %d DV mode : %d, voifCallType : 0x%x, curVolIndex : %d  === \n", mode, sgCallbackData.DiamondVoice_Mode, voifCallType, curVolIndex);
-#endif
-
+#endif    
 #ifdef ENABLE_NXPEX_SOLUTION
     deviceID = voifCallType | sgCallbackData.callMode;
 
@@ -604,18 +568,14 @@ void VoIF_setCallType(VoIF_CallType_t callType)
 	voifCallType = callType;
     
 #ifdef ENABLE_DIAMOND_SOLUTION
-	isCheckInit = 1;
     if(voifCallType == VOIF_VOICE_CALL_WB || voifCallType == VOIF_VT_CALL_WB)
     {
-//   		sgCallbackData.pDiamondVoice_Init(VOIF_WIDE_BAND);
         sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(sgCallbackData.callMode, curVolIndex, sgCallbackData.pDldata_wb, sgCallbackData.pUldata_wb, sgCallbackData.pDlOutput_wb_buf, DiamodVoiceDhaParams, VOIF_WIDE_BAND);
     }
     else
     {
- //  		sgCallbackData.pDiamondVoice_Init(VOIF_NARROW_BAND);
         sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(sgCallbackData.callMode, curVolIndex, sgCallbackData.pDldata_nb, sgCallbackData.pUldata_nb, sgCallbackData.pDlOutput_nb_buf, DiamodVoiceDhaParams, VOIF_NARROW_BAND);
     }
-	isCheckInit = 0;
 #endif    
 
 #ifdef ENABLE_NXPEX_SOLUTION
@@ -689,18 +649,18 @@ void VoIF_setDhaVoiceEq(int mode, int arg1, int arg2, int arg3, int arg4)
         DiamondVoiceDhaDataChk = 0;
         if(sgCallbackData.isInit)
         {
-            printk("\n===============VoIF_setDhaVoiceEq()  Configuration sgCallbackData.callMode=%d=============== \n", sgCallbackData.callMode);
+            printk("\n===============VoIF_setDhaVoiceEq()  Configuration =============== \n");
             /* if it's not RCV mode VEQ and DHA should be off */
             if(sgCallbackData.callMode != AUDIO_MODE_HANDSET)
                 DiamodVoiceDhaParams[0] = 0;
-
+                
             if(voifCallType == VOIF_VOICE_CALL_WB || voifCallType == VOIF_VT_CALL_WB)
             {
-                sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(sgCallbackData.callMode, curVolIndex, sgCallbackData.pDldata_wb, sgCallbackData.pUldata_wb, sgCallbackData.pDlOutput_wb_buf, DiamodVoiceDhaParams, VOIF_WIDE_BAND);
+                sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(mode, curVolIndex, sgCallbackData.pDldata_wb, sgCallbackData.pUldata_wb, sgCallbackData.pDlOutput_wb_buf, DiamodVoiceDhaParams, VOIF_WIDE_BAND);
             }
             else
             {
-                sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(sgCallbackData.callMode, curVolIndex, sgCallbackData.pDldata_nb, sgCallbackData.pUldata_nb, sgCallbackData.pDlOutput_nb_buf, DiamodVoiceDhaParams, VOIF_NARROW_BAND);
+                sgCallbackData.DiamondVoice_Mode = sgCallbackData.pDiamondVoice_Config(mode, curVolIndex, sgCallbackData.pDldata_nb, sgCallbackData.pUldata_nb, sgCallbackData.pDlOutput_nb_buf, DiamodVoiceDhaParams, VOIF_NARROW_BAND);
             }
         }
     }

@@ -64,9 +64,9 @@
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 #define MS_TO_NS(x) (x * 1E6L)
-//static struct hrtimer hr_timer;
-//static ktime_t ktime;
-//static int isHRTimActive;
+static struct hrtimer hr_timer;
+static ktime_t ktime;
+static int isHRTimActive;
 
 #include "mobcom_types.h"
 #include "resultcode.h"
@@ -183,8 +183,7 @@ static void AudDrv_VOIP_FillDL_CB(void *pPrivate, u8 *pDst, u32 nSize, u32 *time
 /* static UInt8 sVoIPAMRSilenceFrame[1] = {0x000f}; */
 static UInt32 delay_count;	/* 20ms each count */
 
-//static int timer_i;
-#if 0
+static int timer_i;
 static enum hrtimer_restart TimerFunction(struct hrtimer *timer)
 {
 #ifdef CONFIG_AUDIO_S2
@@ -217,7 +216,6 @@ static enum hrtimer_restart TimerFunction(struct hrtimer *timer)
 	hrtimer_forward_now(timer, ktime_set(0, (5 * 1000000)));
 	return HRTIMER_RESTART;
 }
-#endif
 
 /* callback for buffer ready of pull mode */
 static void AudDrv_VOIP_DumpUL_CB(void *pPrivate, u8 * pSrc, u32 nSize)
@@ -1835,11 +1833,6 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 void AUDTST_VoIP_Stop(void)
 {
 	if (cur_drv_handle) {
-		aTrace(LOG_AUDIO_DRIVER, "\n AUDTST_VoIP_Stop \n");
-
-		/* disable the hw */
-		AUDCTRL_DisableTelephony();
-
 		AUDIO_DRIVER_Ctrl(cur_drv_handle, AUDIO_DRIVER_STOP, NULL);
 
 		aTrace(LOG_AUDIO_DRIVER, "\nVoIP: Stop\n");
@@ -1847,6 +1840,9 @@ void AUDTST_VoIP_Stop(void)
 #ifdef CONFIG_LOUDMIC_FEATURE
 		gFactory_submic = 0;
 #endif
+
+		/* disable the hw */
+		AUDCTRL_DisableTelephony();
 
 #ifdef CONFIG_ENABLE_VOIF
 		VoIF_setLoopbackMode(0);

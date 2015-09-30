@@ -870,10 +870,9 @@ UInt32 *AUDIO_Return_IHF_48kHz_buffer_base_address(void)
 /*Dump all CFIFO,AADMAC<AHINT,SWTICH CH reg*/
 void Dump_AllCaph_regs(void)
 {
-#if 0
 	volatile unsigned int *base_addr;
 	int t =0;
-
+#if 0
 	base_addr = ((volatile unsigned int *)
 		(HW_IO_PHYS_TO_VIRT(SRCMIXER_BASE_ADDR)));
 

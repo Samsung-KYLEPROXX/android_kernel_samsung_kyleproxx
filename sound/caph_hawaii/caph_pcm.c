@@ -67,7 +67,6 @@ the GPL, without Broadcom's express prior written consent.
 #define	NUM_PLAYBACK_SUBDEVICE	3
 #define	NUM_CAPTURE_SUBDEVICE	2
 
-#define IS_CAPTURE_PCM_MEM_PREALLOCATED   1
 /* limitation for RHEA - only two blocks */
 #define	PCM_MAX_PLAYBACK_BUF_BYTES			(64*1024)
 #define	PCM_MIN_PLAYBACK_PERIOD_BYTES		(256)
@@ -198,7 +197,6 @@ static int PcmHwParams(struct snd_pcm_substream *substream,
 {
 /*DEBUG("\n %lx:hw_params %d\n",jiffies,(int)substream->stream);
  */
-	int retVal = 0;
 
 	aTrace
 	    (LOG_ALSA_INTERFACE, "ALSA-CAPH params_access=%d params_format=%d,"
@@ -208,11 +206,8 @@ static int PcmHwParams(struct snd_pcm_substream *substream,
 	     params_subformat(hw_params), params_channels(hw_params),
 	     params_rate(hw_params), params_buffer_bytes(hw_params));
 
-	retVal = snd_pcm_lib_malloc_pages(substream,
+	return snd_pcm_lib_malloc_pages(substream,
 					params_buffer_bytes(hw_params));
-	aTrace
-	    (LOG_ALSA_INTERFACE, "snd_pcm_lib_malloc_pages retVal=%d\n",retVal);
-	return retVal;
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -1382,7 +1377,7 @@ int __devinit PcmDeviceNew(struct snd_card *card)
 		err =
 		    snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
 						  0,
-						  (IS_CAPTURE_PCM_MEM_PREALLOCATED) ?
+						  (IS_PCM_MEM_PREALLOCATED) ?
 						  PCM_MAX_CAPTURE_BUF_BYTES : 0,
 						  PCM_MAX_CAPTURE_BUF_BYTES);
 		if (err)

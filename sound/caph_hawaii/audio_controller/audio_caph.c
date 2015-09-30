@@ -515,13 +515,13 @@ Result_t AUDIO_Ctrl_Trigger(BRCM_AUDIO_ACTION_en_t action_code,
 	unsigned long t_flag;
 	int is_atomic;
 	int is_cb = 0;
-	static int record48K_in_call_is_blocked;
 
 	if (is_dsp_timeout())
 		return RESULT_OK;
 
 
 	/** BEGIN: not support 48KHz recording during voice call */
+	static int record48K_in_call_is_blocked;
 	if (action_code == ACTION_AUD_StartRecord) {
 
 		BRCM_AUDIO_Param_Start_t param_start;

@@ -443,9 +443,7 @@ void AUDDRV_Telephony_Init(AUDIO_SOURCE_Enum_t mic, AUDIO_SINK_Enum_t speaker,
 		AudioMode_t mode, AudioApp_t app, int bNeedDualMic,
 		int bmuteVoiceCall)
 {
-#ifdef CONFIG_LOUDMIC_FEATURE
 	int gpio_val; //SPK-LOUDMIC
-#endif
 #if defined(ENABLE_DMA_VOICE)
 	UInt16 dma_mic_spk;
 #endif
@@ -1425,9 +1423,9 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 					if (path->srcmRoute[i][j].outChnl == CSL_CAPH_SRCM_STEREO_CH2_L
 					|| path->srcmRoute[i][j].outChnl == CSL_CAPH_SRCM_STEREO_CH2_R) {
 						/*mono output*/
-						if (path->srcmRoute[i][j].inChnl == CSL_CAPH_SRCM_STEREO_CH5 ||
-							path->srcmRoute[i][j].inChnl == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
-							path->srcmRoute[i][j].inChnl == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
+						if (path->srcmRoute[i][j].inChnl == CAPH_SRCM_CH5 ||
+							path->srcmRoute[i][j].inChnl == CAPH_SRCM_PASSCH1 ||
+							path->srcmRoute[i][j].inChnl == CAPH_SRCM_PASSCH2) {
 						/*only on stereo inputs.*/
 							mixInGain = mixInGain - 600;
 							mixInGainR = mixInGainR - 600;
@@ -2224,6 +2222,7 @@ AUDIO_SOURCE_Enum_t AUDDRV_GetSecMicFromSpkr(AUDIO_SINK_Enum_t spkr)
 void AUDDRV_PrintAllMics(void)
 {
 	int i;
+	CSL_CAPH_HWConfig_Table_t *path;
 
 	aTrace(LOG_AUDIO_DRIVER,
 		   "AUDDRV_PrintAllMics:: print primary and secondary"
