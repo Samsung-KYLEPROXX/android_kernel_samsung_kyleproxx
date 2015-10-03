@@ -27,7 +27,7 @@
 #define VCAM0_IO_1_8V_REGULATOR_NEEDED
 #define VCAM_CORE_1_2V_REGULATOR_NEEDED
 
-extern inline struct camdrv_ss_state *to_state(struct v4l2_subdev *sd);
+extern struct camdrv_ss_state *to_state(struct v4l2_subdev *sd);
 
 
 
