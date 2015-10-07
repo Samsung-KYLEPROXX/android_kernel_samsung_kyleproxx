@@ -47,7 +47,7 @@
 #ifdef CONFIG_FRAMEBUFFER_FPS
 #include <linux/fb_fps.h>
 #endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 #include <linux/clk.h>
@@ -115,7 +115,7 @@ struct kona_fb {
 	struct pi_mgr_dfs_node dfs_node;
 	int g_stop_drawing;
 	struct proc_dir_entry *proc_entry;
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	struct early_suspend early_suspend_level1;
 	struct early_suspend early_suspend_level2;
 	struct early_suspend early_suspend_level3;
@@ -891,7 +891,7 @@ static int kona_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	return ret;
 }
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 static void kona_fb_early_suspend(struct early_suspend *h)
 {
 	struct kona_fb *fb;
@@ -1812,7 +1812,7 @@ static int __ref kona_fb_probe(struct platform_device *pdev)
 	free_bootloader_fb();
 #endif
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	fb->early_suspend_level1.suspend = kona_fb_early_suspend;
 	fb->early_suspend_level1.resume = kona_fb_late_resume;
 	fb->early_suspend_level1.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN;
@@ -1932,7 +1932,7 @@ static int __devexit kona_fb_remove(struct platform_device *pdev)
 	struct kona_fb_platform_data *pdata = (struct kona_fb_platform_data *)
 						pdev->dev.platform_data;
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	unregister_early_suspend(&fb->early_suspend_level1);
 	unregister_early_suspend(&fb->early_suspend_level2);
 	unregister_early_suspend(&fb->early_suspend_level3);

@@ -26,7 +26,7 @@
 #include <linux/workqueue.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 #include <linux/module.h>
@@ -75,7 +75,7 @@ struct nt35510_dsi_lcd {
 	unsigned int	esd_enable;
 	struct delayed_work	esd_work;
 #endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	struct early_suspend	earlysuspend;
 #endif
 };
@@ -197,7 +197,7 @@ static void esd_work_func(struct work_struct *work)
 }
 #endif	/*ESD_OPERATION*/
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 static void nt35510_dsi_early_suspend(struct early_suspend *earlysuspend)
 {
   struct nt35510_dsi_lcd *lcd = container_of(earlysuspend, struct nt35510_dsi_lcd, earlysuspend);
@@ -260,12 +260,12 @@ static int nt35510_panel_probe(struct platform_device *pdev)
 #endif
 	{
 	lcd->esd_enable = 1;	
-	INIT_DELAYED_WORK(&(lcd->esd_work), esd_work_func);
-	schedule_delayed_work(&(lcd->esd_work), msecs_to_jiffies(BOOT_WAIT_TIME));	
+	//INIT_DELAYED_WORK(&(lcd->esd_work), esd_work_func);
+	//schedule_delayed_work(&(lcd->esd_work), msecs_to_jiffies(BOOT_WAIT_TIME));	
 	}
 #endif	
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	lcd->earlysuspend.level   = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1;
 	lcd->earlysuspend.suspend = nt35510_dsi_early_suspend;
 	lcd->earlysuspend.resume  = nt35510_dsi_late_resume;
@@ -287,7 +287,7 @@ static int nt35510_panel_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&(lcd->esd_work));	
 #endif
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
   unregister_early_suspend(&lcd->earlysuspend);
 #endif
 

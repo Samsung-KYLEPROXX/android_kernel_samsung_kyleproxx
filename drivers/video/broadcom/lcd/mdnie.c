@@ -20,7 +20,7 @@
 #include <linux/backlight.h>
 #include <linux/platform_device.h>
 #include "mdnie.h"
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 #include <linux/delay.h>
@@ -498,7 +498,7 @@ static struct device_attribute mdnie_attributes[] = {
 };
  
 #ifdef CONFIG_PM
-#if defined(CONFIG_HAS_EARLYSUSPEND)
+#if defined(CONFIG_SCREEN_USE_EARLYSUSPEND)
 void mdnie_early_suspend(struct early_suspend *h)
 {
  
@@ -585,8 +585,8 @@ static int mdnie_probe(struct platform_device *pdev)
  	platform_set_drvdata(pdev, mdnie);
  	dev_set_drvdata(mdnie->dev, mdnie);
  
-#ifdef CONFIG_HAS_WAKELOCK
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_WAKELOCK
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
  	mdnie->early_suspend.suspend = mdnie_early_suspend;
  	mdnie->early_suspend.resume = mdnie_late_resume;
  	mdnie->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN+2; //EARLY_SUSPEND_LEVEL_DISABLE_FB - 1;
@@ -633,7 +633,7 @@ static struct platform_driver mdnie_driver = {
  	},
  	.probe		= mdnie_probe,
  	.remove		= mdnie_remove,
- #ifndef CONFIG_HAS_EARLYSUSPEND
+ #ifndef CONFIG_SCREEN_USE_EARLYSUSPEND
  	.suspend	= mdnie_suspend,
  	.resume		= mdnie_resume,
  #endif

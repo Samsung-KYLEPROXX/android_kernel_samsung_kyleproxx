@@ -17,7 +17,7 @@
 #ifdef __KERNEL__
 #include <linux/mutex.h>
 #include <linux/fb.h>
-#ifdef CONFIG_HAS_WAKELOCK
+#ifdef CONFIG_SCREEN_USE_WAKELOCK
 #include <linux/wakelock.h>
 #include <linux/earlysuspend.h>
 #endif

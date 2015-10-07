@@ -1,7 +1,7 @@
  #ifndef __MDNIE_H__
  #define __MDNIE_H__
  
- #ifdef CONFIG_HAS_EARLYSUSPEND
+ #ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 
@@ -114,7 +114,7 @@
  	enum CABC cabc;
  	unsigned int tunning;
  	unsigned int negative;
- #ifdef CONFIG_HAS_EARLYSUSPEND
+ #ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
  	struct early_suspend    early_suspend;
  #endif
  };

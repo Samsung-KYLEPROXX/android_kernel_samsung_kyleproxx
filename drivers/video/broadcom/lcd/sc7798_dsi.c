@@ -34,7 +34,7 @@
 #include <linux/workqueue.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 #include <linux/module.h>
@@ -85,7 +85,7 @@ struct sc7798_dsi_lcd {
 	struct work_struct	esd_work;
 	bool	esd_processing; 
 #endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	struct early_suspend	earlysuspend;
 #endif
 #ifdef ESD_TEST
@@ -207,7 +207,7 @@ static irqreturn_t esd_interrupt_handler(int irq, void *data)
 }
 #endif	/*ESD_OPERATION*/
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 static void sc7798_dsi_early_suspend(struct early_suspend *earlysuspend)
 {
   struct sc7798_dsi_lcd *lcd = container_of(earlysuspend, struct sc7798_dsi_lcd, earlysuspend);
@@ -321,7 +321,7 @@ static int sc7798_panel_probe(struct platform_device *pdev)
 	lcd->esd_enable = 1;		
 #endif	
 	
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
   lcd->earlysuspend.level   = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1;
   lcd->earlysuspend.suspend = sc7798_dsi_early_suspend;
   lcd->earlysuspend.resume  = sc7798_dsi_late_resume;
@@ -337,7 +337,7 @@ static int sc7798_panel_remove(struct platform_device *pdev)
 
 	dev_dbg(lcd->dev, "%s function entered\n", __func__);
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
   unregister_early_suspend(&lcd->earlysuspend);
 #endif
 

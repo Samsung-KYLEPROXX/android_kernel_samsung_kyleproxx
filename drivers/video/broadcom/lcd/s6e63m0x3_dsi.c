@@ -34,7 +34,7 @@
 #include <linux/workqueue.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 #include <video/kona_fb.h>
@@ -97,7 +97,7 @@ struct s6e63m0_dsi_lcd {
 	struct work_struct	esd_work;
 	bool	esd_processing; 
 #endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 	struct early_suspend	earlysuspend;
 #endif
 #ifdef ESD_TEST
@@ -640,7 +640,7 @@ static void init_smart_dimming_table_22(struct s6e63m0_dsi_lcd *lcd)
 }
 #endif
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
 static void s6e63m0_dsi_early_suspend(struct early_suspend *earlysuspend)
 {
   int ret;
@@ -815,7 +815,7 @@ static int s6e63m0x_panel_probe(struct platform_device *pdev)
 	lcd->esd_enable = 1;		
 #endif	
 	
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
   lcd->earlysuspend.level   = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1;
   lcd->earlysuspend.suspend = s6e63m0_dsi_early_suspend;
   lcd->earlysuspend.resume  = s6e63m0_dsi_late_resume;
@@ -831,7 +831,7 @@ static int s6e63m0x_panel_remove(struct platform_device *pdev)
 
 	dev_dbg(lcd->dev, "%s function entered\n", __func__);
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_SCREEN_USE_EARLYSUSPEND
   unregister_early_suspend(&lcd->earlysuspend);
 #endif
 
@@ -847,7 +847,7 @@ static struct platform_driver s6e63m0x_panel_driver = {
 	},
 	.probe		= s6e63m0x_panel_probe,
 	.remove		= s6e63m0x_panel_remove,
-#ifndef CONFIG_HAS_EARLYSUSPEND
+#ifndef CONFIG_SCREEN_USE_EARLYSUSPEND
 	.suspend        = s6e63m0x_panel_suspend,
 	.resume         = s6e63m0x_panel_resume,
 #endif
