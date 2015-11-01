@@ -48,6 +48,14 @@ config IOSCHED_BFQ
 	  provided.  If compiled built-in (saying Y here), BFQ can
 	  be configured to support hierarchical scheduling.
 
+config IOSCHED_FIOPS
+        tristate "IOPS based I/O scheduler"
+	default y
+	---help---
+	This is an IOPS based I/O scheduler. It will try to distribute
+	IOPS equally among all processes in the system. It's mainly for
+	Flash based storage.
+
 config CFQ_GROUP_IOSCHED
 	bool "CFQ Group Scheduling support"
 	depends on IOSCHED_CFQ && BLK_CGROUP
@@ -74,6 +82,9 @@ choice
 	config DEFAULT_BFQ
 		bool "BFQ" if IOSCHED_BFQ=y
 
+	config DEFAULT_FIOPS
+		bool "FIOPS" if IOSCHED_FIOPS=y
+
 endchoice
 
 config DEFAULT_IOSCHED
@@ -82,6 +93,7 @@ config DEFAULT_IOSCHED
 	default "cfq" if DEFAULT_CFQ
 	default "noop" if DEFAULT_NOOP
 	default "bfq" if DEFAULT_BFQ
+	default "fiops" if DEFAULT_FIOPS
 
 endmenu
 
