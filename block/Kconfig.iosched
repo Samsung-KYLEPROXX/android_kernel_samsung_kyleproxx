@@ -36,6 +36,18 @@ config IOSCHED_CFQ
 
 	  Note: If BLK_CGROUP=m, then CFQ can be built only as module.
 
+config IOSCHED_BFQ
+	tristate "BFQ I/O scheduler"
+	depends on EXPERIMENTAL
+	default n
+	---help---
+	  The BFQ I/O scheduler tries to distribute bandwidth among
+	  all processes in the system, according to their weights,
+	  which can be set using task ioprio values.  It aims at giving
+	  deterministic guarantees on the distribution of the service
+	  provided.  If compiled built-in (saying Y here), BFQ can
+	  be configured to support hierarchical scheduling.
+
 config CFQ_GROUP_IOSCHED
 	bool "CFQ Group Scheduling support"
 	depends on IOSCHED_CFQ && BLK_CGROUP
@@ -59,6 +71,9 @@ choice
 	config DEFAULT_NOOP
 		bool "No-op"
 
+	config DEFAULT_BFQ
+		bool "BFQ" if IOSCHED_BFQ=y
+
 endchoice
 
 config DEFAULT_IOSCHED
@@ -66,6 +81,7 @@ config DEFAULT_IOSCHED
 	default "deadline" if DEFAULT_DEADLINE
 	default "cfq" if DEFAULT_CFQ
 	default "noop" if DEFAULT_NOOP
+	default "bfq" if DEFAULT_BFQ
 
 endmenu
 
