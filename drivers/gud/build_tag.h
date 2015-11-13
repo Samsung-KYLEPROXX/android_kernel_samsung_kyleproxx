@@ -1,0 +1,1 @@
+#define MOBICORE_COMPONENT_BUILD_TAG "*** t-base-202-BRCM-21664-Android-V001 ###"
