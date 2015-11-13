@@ -3013,6 +3013,7 @@ static int count_overhead(struct super_block *sb, ext4_group_t grp,
 		ext4_count_free(buf, EXT4_CLUSTERS_PER_GROUP(sb) / 8);
 }
 
+
 /*
  * Compute the overhead and stash it in sbi->s_overhead
  */
@@ -3671,6 +3672,18 @@ static int ext4_fill_super(struct super_block *sb, void *data, int silent)
 	percpu_counter_set(&sbi->s_dirtyclusters_counter, 0);
 
 no_journal:
+	/*
+	 * Get the # of file system overhead blocks from the
+	 * superblock if present.
+	 */
+	if (es->s_overhead_clusters)
+		sbi->s_overhead = le32_to_cpu(es->s_overhead_clusters);
+	else {
+		ret = ext4_calculate_overhead(sb);
+		if (ret)
+			goto failed_mount_wq;
+	}
+
 	/*
 	 * Get the # of file system overhead blocks from the
 	 * superblock if present.
