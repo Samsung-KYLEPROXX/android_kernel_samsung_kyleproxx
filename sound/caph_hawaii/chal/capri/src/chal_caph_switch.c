@@ -180,7 +180,7 @@ void chal_caph_switch_select_src(CHAL_HANDLE handle,
             /* found the channel we are looking for, enable the channel */
             // reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
             for (loopCount = 5; loopCount != 0; loopCount--)
-                reg_val = BRCM_READ_REG_IDX(base, CPH_SSASW_CH01_SRC, (index * CHAL_CAPH_SWITCH_CH_REG_SIZE));
+            reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
             reg_val &= ~CPH_SSASW_CH01_SRC_CH01_SRC_ADDR_MASK;
             reg_val |= (address&CPH_SSASW_CH01_SRC_CH01_SRC_ADDR_MASK);
             BRCM_WRITE_REG_IDX(base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE), reg_val);
@@ -435,7 +435,7 @@ void chal_caph_switch_disable(CHAL_HANDLE handle,
             /* found the channel we are looking for, disable the channel */
             // reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
             for (loopCount = 5; loopCount != 0; loopCount--)
-                reg_val = BRCM_READ_REG_IDX(base, CPH_SSASW_CH01_SRC, (index * CHAL_CAPH_SWITCH_CH_REG_SIZE));
+            reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
             reg_val &= ~CPH_SSASW_CH01_SRC_CH01_SRC_EN_MASK;
             BRCM_WRITE_REG_IDX(base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE), reg_val);
         }
@@ -608,7 +608,7 @@ void chal_caph_switch_set_datafmt(CHAL_HANDLE handle,
             /* found the channel we are looking for, disable the channel */
             // reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
             for (loopCount = 5; loopCount != 0; loopCount--)
-                reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
+            reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
 
             /* Configure the trigger selection */
             reg_val &= ~CPH_SSASW_CH01_SRC_CH01_TWO_WORDS_MASK;
@@ -655,7 +655,7 @@ void chal_caph_switch_select_trigger(CHAL_HANDLE handle,
             /* found the channel we are looking for, disable the channel */
             // reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
             for (loopCount = 5; loopCount != 0; loopCount--)
-                reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
+            reg_val = BRCM_READ_REG_IDX( base,  CPH_SSASW_CH01_SRC, (index*CHAL_CAPH_SWITCH_CH_REG_SIZE));
 
             /* Configure the trigger selection */
             reg_val &= ~CPH_SSASW_CH01_SRC_CH01_TRIGGER_SEL_MASK;
@@ -686,14 +686,14 @@ void chal_caph_switch_select_trigger(CHAL_HANDLE handle,
 void chal_caph_switch_enable_clock(CHAL_HANDLE handle)
 {
     cUInt32     base = ((chal_caph_switch_cb_t*)handle)->base;
-    cUInt32 reg_val, loop;
+	cUInt32 reg_val, loop;
 
-    chal_caph_switch_set_clock0(handle, 0x6, 0x659);
+	chal_caph_switch_set_clock0(handle, 0x6, 0x659);
 
-    for (loop = 5; loop != 0; loop--)
-        reg_val = BRCM_READ_REG( base,  CPH_SSASW_SSASW_NOC);
+	for (loop = 5; loop != 0; loop--)
+    reg_val = BRCM_READ_REG( base,  CPH_SSASW_SSASW_NOC);
 
-    reg_val = BRCM_READ_REG(base, CPH_SSASW_SSASW_NOC);
+	reg_val = BRCM_READ_REG(base, CPH_SSASW_SSASW_NOC);
     reg_val |= (CPH_SSASW_SSASW_NOC_SSASW_NOC_EN_MASK);
     BRCM_WRITE_REG( base,  CPH_SSASW_SSASW_NOC,reg_val);
 
@@ -713,16 +713,16 @@ void chal_caph_switch_enable_clock(CHAL_HANDLE handle)
 void chal_caph_switch_disable_clock(CHAL_HANDLE handle)
 {
     cUInt32     base = ((chal_caph_switch_cb_t*)handle)->base;
-    cUInt32 reg_val, loop;
+	cUInt32 reg_val, loop;
 
-    reg_val = BRCM_READ_REG(base, CPH_SSASW_SSASW_MN0_DIVIDER);
-    reg_val &= ~CPH_SSASW_SSASW_MN0_DIVIDER_M0_RATIO_MASK;
-    BRCM_WRITE_REG(base, CPH_SSASW_SSASW_MN0_DIVIDER, reg_val);
+	reg_val = BRCM_READ_REG(base, CPH_SSASW_SSASW_MN0_DIVIDER);
+	reg_val &= ~CPH_SSASW_SSASW_MN0_DIVIDER_M0_RATIO_MASK;
+	BRCM_WRITE_REG(base, CPH_SSASW_SSASW_MN0_DIVIDER, reg_val);
 
-    for (loop = 5; loop != 0; loop--)
-        reg_val = BRCM_READ_REG( base,  CPH_SSASW_SSASW_NOC);
+	for (loop = 5; loop != 0; loop--)
+    reg_val = BRCM_READ_REG( base,  CPH_SSASW_SSASW_NOC);
 
-    reg_val = BRCM_READ_REG(base, CPH_SSASW_SSASW_NOC);
+	reg_val = BRCM_READ_REG(base, CPH_SSASW_SSASW_NOC);
     reg_val &= ~(CPH_SSASW_SSASW_NOC_SSASW_NOC_EN_MASK);
     BRCM_WRITE_REG( base,  CPH_SSASW_SSASW_NOC,reg_val);
 

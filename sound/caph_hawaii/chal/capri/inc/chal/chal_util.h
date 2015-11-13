@@ -27,7 +27,7 @@ typedef uint8_t   UInt8;
 
 #define BRCM_REGTYPE(r)     BRCM_CONCAT(r,_TYPE)
 
-#define BRCM_REGADDR(b,r)   ( (b) + ( BRCM_REGOFS(r) ) )
+#define BRCM_REGADDR(b,r)   (void volatile*)( (b) + ( BRCM_REGOFS(r) ) )
 
 #define BRCM_FIELDMASK(r,f) (BRCM_CONCAT(BRCM_FIELDNAME(r,f),_MASK))
 

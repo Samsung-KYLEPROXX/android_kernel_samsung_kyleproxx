@@ -1,16 +1,16 @@
 /*
  * Copyright 2012 Broadcom Corporation
-*
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
  * published by the Free Software Foundation (the "GPL").
-*
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
-*
- * A copy of the GPL is available at 
+ *
+ * A copy of the GPL is available at
  * http://www.broadcom.com/licenses/GPLv2.php, or by writing to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
@@ -27,6 +27,7 @@
 #include <chal/chal_audio_int.h>
 #include <mach/rdb/brcm_rdb_audioh.h>
 #include <chal/chal_util.h>
+#include <mach/cpu.h>
 
 /*
  * ****************************************************************************
@@ -177,7 +178,7 @@ void chal_audio_earpath_int_enable(
 		reg_val &= ~AUDIOH_AUDIO_INTC_VOUT_FIFO_ERRINT_EN_MASK;
 
 	/* Set the required setting */
-	BRCM_WRITE_REG(base,  AUDIOH_AUDIO_INTC, reg_val);
+	/* BRCM_WRITE_REG(base,  AUDIOH_AUDIO_INTC, reg_val); */
 
 	return;
 }
@@ -802,15 +803,17 @@ void chal_audio_earpath_set_dac_pwr(CHAL_HANDLE handle, cUInt16 enable)
 
 		reg_value = BRCM_READ_REG(base, AUDIOH_HS_PWR);
 		reg_value &= ~(AUDIOH_HS_PWR_AUDIOTX_HS_REF_PD_MASK);
-		reg_value &= ~(AUDIOH_HS_PWR_AUDIOTX_HS_DACR_PD_MASK);
-		reg_value &= ~(AUDIOH_HS_PWR_AUDIOTX_HS_DACL_PD_MASK);
 		BRCM_WRITE_REG(base, AUDIOH_HS_PWR, reg_value);
 
 		/* Not only HS but also IHF. This should be fixed in A1 */
-		reg_value = BRCM_READ_REG(base, AUDIOH_IHF_PWR);
-		reg_value &= ~(AUDIOH_IHF_PWR_AUDIOTX_IHF_DACR_PD_MASK);
-		reg_value &= ~(AUDIOH_IHF_PWR_AUDIOTX_IHF_DACL_PD_MASK);
-		BRCM_WRITE_REG(base, AUDIOH_IHF_PWR, reg_value);
+		/* Don't set DAC PD for Java H/W */
+		if (get_chip_id() < KONA_CHIP_ID_JAVA_A0) {
+			reg_value = BRCM_READ_REG(base, AUDIOH_IHF_PWR);
+			reg_value &= ~(AUDIOH_IHF_PWR_AUDIOTX_IHF_DACR_PD_MASK);
+			reg_value &= ~(AUDIOH_IHF_PWR_AUDIOTX_IHF_DACL_PD_MASK);
+			BRCM_WRITE_REG(base, AUDIOH_IHF_PWR, reg_value);
+		}
+
 	} else {
 
 		/* the following note is from Rhea A0:
@@ -831,16 +834,17 @@ void chal_audio_earpath_set_dac_pwr(CHAL_HANDLE handle, cUInt16 enable)
 		if (!chal_audio_isHSpath_active()) {
 			reg_value = BRCM_READ_REG(base, AUDIOH_HS_PWR);
 			reg_value |= AUDIOH_HS_PWR_AUDIOTX_HS_REF_PD_MASK;
-			reg_value |= AUDIOH_HS_PWR_AUDIOTX_HS_DACR_PD_MASK;
-			reg_value |= AUDIOH_HS_PWR_AUDIOTX_HS_DACL_PD_MASK;
 			BRCM_WRITE_REG(base, AUDIOH_HS_PWR, reg_value);
 		}
 
 		/* Not only HS but also IHF. This should be fixed in A1 */
-		reg_value = BRCM_READ_REG(base, AUDIOH_IHF_PWR);
-		reg_value |= AUDIOH_IHF_PWR_AUDIOTX_IHF_DACR_PD_MASK;
-		reg_value |= AUDIOH_IHF_PWR_AUDIOTX_IHF_DACL_PD_MASK;
-		BRCM_WRITE_REG(base, AUDIOH_IHF_PWR, reg_value);
+		/* Don't clear DAC PD for Java H/W */
+		if (get_chip_id() < KONA_CHIP_ID_JAVA_A0) {
+			reg_value = BRCM_READ_REG(base, AUDIOH_IHF_PWR);
+			reg_value |= AUDIOH_IHF_PWR_AUDIOTX_IHF_DACR_PD_MASK;
+			reg_value |= AUDIOH_IHF_PWR_AUDIOTX_IHF_DACL_PD_MASK;
+			BRCM_WRITE_REG(base, AUDIOH_IHF_PWR, reg_value);
+		}
 	}
 	return;
 }

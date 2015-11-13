@@ -36,6 +36,7 @@
 #include <mach/comms/platform_mconfig.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <mach/memory.h>
 #include "msconsts.h"
 #include "shared.h"
 #include "csl_dsp.h"
@@ -118,7 +119,7 @@ void DSPDRV_Init()
 
 	aTrace(LOG_AUDIO_DSP, "DSPDRV_Init:\n");
 
-	dsp_drv.h = chal_intc_init(KONA_BINTC_BASE_ADDR);
+	dsp_drv.h = chal_intc_init((cUInt32)KONA_BINTC_BASE_ADDR);
 
 	dsp_shared_mem = DSPDRV_GetSharedMemoryAddress();
 
@@ -211,7 +212,8 @@ static irqreturn_t rip_isr(int irq, void *dev_id)
 ******************************************************************************/
 static void dsp_thread_proc(unsigned long data)
 {
-	AP_ProcessStatus();
+	if (ap_shared_mem)
+		AP_ProcessStatus();
 
 	enable_irq(COMMS_SUBS6_IRQ);
 

@@ -53,6 +53,8 @@ Copyright 2009 - 2011  Broadcom Corporation
 #include "audio_controller.h"
 #include "audio_trace.h"
 #include "audio_caph.h"
+#include "caph_common.h"
+
 
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
@@ -121,7 +123,8 @@ struct _VOIP_t {
 	void *pVoIPCBPrivate;
 	AUDIO_DRIVER_VoipCB_t pVoipULCallback;
 	AUDIO_DRIVER_VoipDLCB_t pVoipDLCallback;
-	UInt16 codec_type;
+	UInt16 codec_type_ul;
+	UInt16 codec_type_dl;
 	Boolean isVoLTECall;
 };
 #define VOIP_t struct _VOIP_t
@@ -180,15 +183,19 @@ static int index = 1;
 static Boolean endOfBuffer = FALSE;
 static const UInt16 sVoIPDataLen[] = { 0, 322, 160, 38, 166, 642, 70 };
 static CSL_VP_Mode_AMR_t prev_amr_mode = (CSL_VP_Mode_AMR_t) 0xffff;
-static Boolean telephony_amr_if2;
+static int wait_cnt, waitcnt_thold = 2;
 static UInt32 isDTXEnabled;
 
 static struct work_struct voip_work;
 static struct workqueue_struct *voip_workqueue; /* init to NULL */
 static DJB_InputFrame *djbBuf; /* init to NULL */
 static Boolean inVoLTECall = FALSE;
+
+#if defined(CONFIG_BCM_MODEM)
+static Boolean telephony_amr_if2;
 static AUDDRV_VOIF_t voifDrv = { 0 };
 static Boolean voif_enabled; /* init to 0 */
+#endif
 static Boolean init_mic_data_zeroed = FALSE;
 
 /* Private function prototypes */
@@ -225,12 +232,14 @@ static Result_t AUDIO_DRIVER_ProcessCaptureVoiceCmd(AUDIO_DDRIVER_t *aud_drv,
 						    AUDIO_DRIVER_CTRL_t
 						    ctrl_cmd,
 						    void *pCtrlStruct);
+#if defined(CONFIG_BCM_MODEM)
 static Result_t ARM2SP_play_start(AUDIO_DDRIVER_t *aud_drv,
 				  UInt32 numFramesPerInterrupt);
 
 static Result_t ARM2SP_play_resume(AUDIO_DDRIVER_t *aud_drv);
 
 static Result_t VPU_record_start(VOCAPTURE_start_t capt_start);
+#endif
 
 /*static Boolean VoIP_StartTelephony(
 	VOIPDumpFramesCB_t telephony_dump_cb,
@@ -240,6 +249,7 @@ static Boolean VoIP_StartTelephony(void);
 
 static Boolean VoIP_StopTelephony(void);
 
+#if defined(CONFIG_BCM_MODEM)
 /**
  * decode_amr_mode : for decoding next speech frame
  * pBuf : buffer carrying the AMR speech data to be decoded
@@ -255,6 +265,7 @@ static void VoIP_StartMainAMRDecodeEncode(
 	Boolean dtx_mode,
 	UInt32 dl_timestamp
 );
+#endif
 static void AUDIO_DRIVER_RenderDmaCallback(
 	UInt32 stream_id,
 	UInt32 buffer_idx);
@@ -263,12 +274,16 @@ static void AUDIO_DRIVER_CaptureDmaCallback(
 	UInt32 stream_id,
 	UInt32 buffer_idx);
 
+#if defined(CONFIG_BCM_MODEM)
 static Boolean VOIP_DumpUL_CB(
 	UInt8 *pSrc,	/* pointer to start of speech data */
 	UInt32 amrMode	/* AMR codec mode of speech data */
 );
+#endif
+
 static Boolean VOIP_FillDL_CB(UInt32 nFrames);
 
+#if defined(CONFIG_BCM_MODEM)
 static void Ptt_FillDL_CB(UInt32 buf_index, UInt32 ptt_flag, UInt32 int_rate);
 
 static Boolean VoLTE_WriteDLData(
@@ -276,12 +291,16 @@ static Boolean VoLTE_WriteDLData(
 	UInt16 *pBuf,
 	UInt32 dl_timestamp);
 
-static enum hrtimer_restart TimerCbSendSilence(struct hrtimer *timer);
 static void setKtime(UInt16 speechMode, UInt16 framesPerInt);
+
 static UInt8 getRFCFrameType(UInt16 frame_type,
 		UInt16 amr_codec_mode, Boolean isAMRWB);
 
 static Boolean getAMRBandwidth(UInt16 codec_mode);
+#endif
+
+static enum hrtimer_restart TimerCbSendSilence(struct hrtimer *timer);
+
 /* Functions */
 
 UInt32 StreamIdOfDriver(AUDIO_DRIVER_HANDLE_t h)
@@ -441,7 +460,9 @@ AUDIO_DRIVER_HANDLE_t AUDIO_DRIVER_Open(AUDIO_DRIVER_TYPE_t drv_type)
 		spin_lock_irqsave(&audio_ptt_driver.audio_lock, flags);
 		audio_ptt_driver.aud_drv_p = aud_drv;
 		spin_unlock_irqrestore(&audio_ptt_driver.audio_lock, flags);
+#ifdef CONFIG_BCM_MODEM
 		CSL_RegisterPTTStatusHandler(Ptt_FillDL_CB);
+#endif
 		break;
 
 	default:
@@ -451,6 +472,28 @@ AUDIO_DRIVER_HANDLE_t AUDIO_DRIVER_Open(AUDIO_DRIVER_TYPE_t drv_type)
 	}
 	return (AUDIO_DRIVER_HANDLE_t) aud_drv;
 }
+
+/**
+ *
+ * Function Name: AUDIO_DRIVER_VoipStatus
+ *
+ * Description:   This function returns whether voip driver is running or not
+ *
+ ***************************************************************************/
+
+Boolean AUDIO_DRIVER_VoipStatus(void)
+{
+	 bool  voipstatus;
+	 if (audio_voip_driver.aud_drv_p)
+		voipstatus =  TRUE;
+	 else
+		voipstatus = FALSE;
+
+	 aTrace(LOG_AUDIO_DRIVER, "voipstatus = %d\n", voipstatus);
+
+	 return voipstatus;
+}
+
 
 /**
  *
@@ -476,9 +519,26 @@ void AUDIO_DRIVER_Close(AUDIO_DRIVER_HANDLE_t drv_handle)
 	case AUDIO_DRIVER_PLAY_AUDIO:
 	case AUDIO_DRIVER_PLAY_EPT:
 	case AUDIO_DRIVER_PLAY_RINGER:
+		{
+			spin_lock_irqsave(&audio_render_driver[aud_drv->
+						stream_id].audio_lock, flags);
+			audio_render_driver[aud_drv->stream_id].aud_drv_p =
+									NULL;
+			spin_unlock_irqrestore(&audio_render_driver[aud_drv->
+						stream_id].audio_lock, flags);
+		}
+		break;
 	case AUDIO_DRIVER_CAPT_HQ:
 	case AUDIO_DRIVER_CAPT_EPT:
 	case AUDIO_DRIVER_CAPT_VOICE:
+		{
+			spin_lock_irqsave(&audio_capture_driver.audio_lock,
+									flags);
+			audio_capture_driver.aud_drv_p = NULL;
+			spin_unlock_irqrestore(&audio_capture_driver.
+							audio_lock, flags);
+		}
+		break;
 	case AUDIO_DRIVER_VOIF:
 		break;
 	case AUDIO_DRIVER_VOIP:
@@ -494,7 +554,9 @@ void AUDIO_DRIVER_Close(AUDIO_DRIVER_HANDLE_t drv_handle)
 		break;
 	case AUDIO_DRIVER_PTT:
 		{
+#ifdef CONFIG_BCM_MODEM
 			CSL_RegisterPTTStatusHandler(NULL);
+#endif
 			spin_lock_irqsave(&audio_ptt_driver.audio_lock, flags);
 			audio_ptt_driver.aud_drv_p = NULL;
 			spin_unlock_irqrestore(
@@ -509,6 +571,7 @@ void AUDIO_DRIVER_Close(AUDIO_DRIVER_HANDLE_t drv_handle)
 	}
 	/* free the driver structure */
 	kfree(aud_drv);
+	aud_drv = NULL;
 	return;
 }
 
@@ -770,19 +833,11 @@ static Result_t AUDIO_DRIVER_ProcessRenderCmd(AUDIO_DDRIVER_t *aud_drv,
 	case AUDIO_DRIVER_BUFFER_READY:
 		{
 			/*notify render a new buffer is ready*/
-			BRCM_AUDIO_Param_BufferReady_t *param_tmp = pCtrlStruct;
-			int offset = 0, size = 0;
-
 			result_code = RESULT_OK;
-			if (param_tmp != NULL) {
-				offset = param_tmp->offset;
-				size = param_tmp->size;
-			}
-
 			if (aud_drv->stream_id) {
 				result_code =
 				csl_audio_render_buffer_ready
-				(aud_drv->stream_id, size, offset);
+				(aud_drv->stream_id);
 			}
 		}
 		break;
@@ -1131,6 +1186,10 @@ static Result_t AUDIO_DRIVER_ProcessCaptureVoiceCmd(AUDIO_DDRIVER_t *aud_drv,
 			UInt32 speech_mode = CSL_VP_SPEECH_MODE_LINEAR_PCM_8K;
 			VOCAPTURE_start_t capt_start;
 
+			if (AUDCTRL_GetCPResetState() ||
+				AUDCTRL_GetAudioPathResetPendingState())
+				return RESULT_ERROR;
+
 			if (pCtrlStruct != NULL)
 				voiceRecStr = (voice_rec_t *) pCtrlStruct;
 			else
@@ -1189,6 +1248,19 @@ static Result_t AUDIO_DRIVER_ProcessCaptureVoiceCmd(AUDIO_DDRIVER_t *aud_drv,
 			spin_unlock_irqrestore(&audio_capture_driver
 				.audio_lock, flags);
 
+			if (AUDCTRL_InVoiceCall()) {
+				wait_cnt = 100;
+				waitcnt_thold = 2;
+			} else {
+				if (num_frames >= 3)
+					waitcnt_thold = 2;
+				else if (num_frames == 2)
+					waitcnt_thold = 4;
+				else
+					waitcnt_thold = 8;
+				wait_cnt = 0;
+			}
+
 			memset(&capt_start, 0, sizeof(VOCAPTURE_start_t));
 			capt_start.recordMode = recordMode;
 			capt_start.samplingRate = aud_drv->sample_rate;
@@ -1220,6 +1292,7 @@ static Result_t AUDIO_DRIVER_ProcessCaptureVoiceCmd(AUDIO_DDRIVER_t *aud_drv,
 			result_code = RESULT_OK;
 			index = 1;	/* reset */
 			endOfBuffer = FALSE;
+			wait_cnt = 0;
 
 			init_mic_data_zeroed = FALSE;
 			/* de-init during stop as the android sequence is
@@ -1267,14 +1340,18 @@ static Result_t AUDIO_DRIVER_ProcessPttCmd(AUDIO_DDRIVER_t *aud_drv,
 	case AUDIO_DRIVER_START:
 	{
 		/* start the PTT */
+#ifdef CONFIG_BCM_MODEM
 		VPRIPCMDQ_PTTEnable(1);
+#endif
 		result_code = RESULT_OK;
 	}
 	break;
 	case AUDIO_DRIVER_STOP:
 	{
 		/* Stop the PTT */
+#ifdef CONFIG_BCM_MODEM
 		VPRIPCMDQ_PTTEnable(0);
+#endif
 		result_code = RESULT_OK;
 	}
 	break;
@@ -1299,7 +1376,7 @@ static Result_t AUDIO_DRIVER_ProcessPttCmd(AUDIO_DDRIVER_t *aud_drv,
 	case AUDIO_DRIVER_GET_PTT_BUFFER:
 	{
 		UInt32 buf_index;
-		Int16  *buf_ptr;
+		Int16  *buf_ptr = NULL;
 		if (pCtrlStruct == NULL) {
 			aError(
 				"AUDIO_DRIVER_ProcessPttCmd::Invalid Ptr\n");
@@ -1307,9 +1384,16 @@ static Result_t AUDIO_DRIVER_ProcessPttCmd(AUDIO_DDRIVER_t *aud_drv,
 		}
 		/* get the buffer pointer */
 		buf_index = *((UInt32 *)pCtrlStruct);
+
+#ifdef CONFIG_BCM_MODEM
 		buf_ptr = CSL_GetULPTTBuffer(buf_index);
 		*((UInt32 *)pCtrlStruct) = (UInt32) buf_ptr;
 		result_code = RESULT_OK;
+#else
+		*((UInt32 *)pCtrlStruct) = (UInt32) buf_ptr;
+		aError("AUDIO_DRIVER_ProcessPttCmd:: Modem not configured\n");
+		return result_code;
+#endif
 	}
 	break;
 	default:
@@ -1334,7 +1418,8 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 					    void *pCtrlStruct)
 {
 	Result_t result_code = RESULT_ERROR;
-	UInt32 codec_type = 99;	/* valid number:0~5 */
+	UInt32 codec_type_ul = 99;/* valid number:0~5 */
+	UInt32 codec_type_dl = 99;/* valid number:0~5 */
 	UInt32 bitrate_index = 0;
 	CSL_VP_Mode_AMR_t encode_amr_mode;
 
@@ -1346,36 +1431,86 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 	{
 
 		if (pCtrlStruct != NULL) {
-			codec_type =
-			    ((voip_data_t *) pCtrlStruct)->codec_type;
+			codec_type_ul =
+			    ((voip_data_t *) pCtrlStruct)->codec_type_ul;
+			codec_type_dl =
+			    ((voip_data_t *) pCtrlStruct)->codec_type_dl;
 			bitrate_index =
 			    ((voip_data_t *) pCtrlStruct)->
 			    bitrate_index;
 			isDTXEnabled =
 			    ((voip_data_t *) pCtrlStruct)->
 			    isDTXEnabled;
+
 		}
 
-		if (codec_type == 0)
-			aud_drv->voip_config.codec_type = CSL_VOIP_PCM;
-		else if (codec_type == 1)
-			aud_drv->voip_config.codec_type = CSL_VOIP_FR;
-		else if (codec_type == 2)
-			aud_drv->voip_config.codec_type = CSL_VOIP_AMR475;
-		else if (codec_type == 3)
-			aud_drv->voip_config.codec_type = CSL_VOIP_G711_U;
-		else if (codec_type == 4)
-			aud_drv->voip_config.codec_type = CSL_VOIP_PCM_16K;
-		else if (codec_type == 5)
-			aud_drv->voip_config.codec_type =
+		if (codec_type_ul == VoIP_Codec_PCM_8K)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_PCM;
+		else if (codec_type_ul == VoIP_Codec_FR)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_FR;
+		else if (codec_type_ul == VoIP_Codec_AMR475)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_AMR475;
+		else if (codec_type_ul == VOIP_Codec_G711_U)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_G711_U;
+		else if (codec_type_ul == VoIP_Codec_PCM_16K)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_PCM_16K;
+		else if (codec_type_ul == VOIP_Codec_AMR_WB_7K)
+			aud_drv->voip_config.codec_type_ul =
 			   CSL_VOIP_AMR_WB_MODE_7k;
-		else {
+		else if (codec_type_ul != VoIP_Codec_None) {
 			aWarn(
-				"AUDIO_DRIVER_ProcessVOIPCmd::Codec Type not supported\n");
+				"AUDIO_DRIVER_ProcessVOIPCmd::Codec Type not"
+				"supported\n");
 			break;
 		}
 
-		aud_drv->voip_config.codec_type += (bitrate_index << 8);
+		if (codec_type_dl == VoIP_Codec_PCM_8K)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_PCM;
+		else if (codec_type_dl == VoIP_Codec_FR)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_FR;
+		else if (codec_type_dl == VoIP_Codec_AMR475)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_AMR475;
+		else if (codec_type_dl == VOIP_Codec_G711_U)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_G711_U;
+		else if (codec_type_dl == VoIP_Codec_PCM_16K)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_PCM_16K;
+		else if (codec_type_dl == VOIP_Codec_AMR_WB_7K)
+			aud_drv->voip_config.codec_type_dl =
+			   CSL_VOIP_AMR_WB_MODE_7k;
+		else if (codec_type_dl != VoIP_Codec_None) {
+			aWarn(
+				"AUDIO_DRIVER_ProcessVOIPCmd::Codec Type not"
+				"supported\n");
+			break;
+		}
+
+		aTrace(LOG_AUDIO_DRIVER, "AUDIO_DRIVER_START: VoIPCmd [0x%x:0x%x]\n",
+			aud_drv->voip_config.codec_type_ul, aud_drv->voip_config.codec_type_dl);
+
+		if (aud_drv->voip_config.codec_type_ul == VoIP_Codec_None)
+		{
+			if (aud_drv->voip_config.codec_type_dl != VoIP_Codec_None)
+				aud_drv->voip_config.codec_type_ul = aud_drv->voip_config.codec_type_dl;
+			else
+				aud_drv->voip_config.codec_type_ul = VoIP_Codec_PCM_16K; // by default
+
+			aTrace(LOG_AUDIO_DRIVER, "AUDIO_DRIVER_START: VoIPCmd forced UL codec [0x%x]\n",
+				aud_drv->voip_config.codec_type_ul);
+		}
+
+		if (aud_drv->voip_config.codec_type_dl == VoIP_Codec_None)
+		{
+			if (aud_drv->voip_config.codec_type_ul != VoIP_Codec_None)
+				aud_drv->voip_config.codec_type_dl = aud_drv->voip_config.codec_type_ul;
+			else
+				aud_drv->voip_config.codec_type_dl = VoIP_Codec_PCM_16K; // by default
+
+			aTrace(LOG_AUDIO_DRIVER, "AUDIO_DRIVER_START: VoIPCmd forced DL codec [0x%x]\n",
+				aud_drv->voip_config.codec_type_dl);
+		}
+
+		aud_drv->voip_config.codec_type_ul += (bitrate_index << 8);
+		aud_drv->voip_config.codec_type_dl += (bitrate_index << 8);
 		aud_drv->tmp_buffer = kzalloc(VOIP_MAX_FRAME_LEN, GFP_KERNEL);
 
 		if (aud_drv->tmp_buffer == NULL)
@@ -1387,9 +1522,8 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 		inVoLTECall = ((voip_data_t *) pCtrlStruct)->isVoLTE;
 		if (inVoLTECall) {
 #ifdef CONFIG_BCM_MODEM
-			if ((aud_drv->voip_config.codec_type & CSL_VOIP_AMR475)
-			    || (aud_drv->voip_config.codec_type &
-				CSL_VOIP_AMR_WB_MODE_7k)) {
+			if ((aud_drv->voip_config.codec_type_ul & CSL_VOIP_AMR475)
+			    || (aud_drv->voip_config.codec_type_ul & CSL_VOIP_AMR_WB_MODE_7k)) {
 				if (djbBuf == NULL)
 					djbBuf = kzalloc(
 						sizeof(DJB_InputFrame),
@@ -1397,7 +1531,7 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 				DJB_Init();
 				aTrace(LOG_AUDIO_DRIVER,
 					"==> VoLTE call starts, codec_type=%x\n",
-					aud_drv->voip_config.codec_type);
+					aud_drv->voip_config.codec_type_ul);
 			} else {
 				aWarn(
 					"==> Codec Type not supported in VoLTE\n");
@@ -1407,7 +1541,7 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 		/* start the VoLTE session  without sending
 		any dummy DL frames */
 		encode_amr_mode = (CSL_VP_Mode_AMR_t)
-			aud_drv->voip_config.codec_type;
+			aud_drv->voip_config.codec_type_ul;
 		encode_amr_mode |= VOLTECALLENABLE;
 /* Here setting DTX does not work for unknown reason.
  * And it affects VoIP_StartMainAMRDecodeEncode() setting
@@ -1483,36 +1617,67 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 	case AUDIO_DRIVER_SET_AMR:
 	{
 		if (pCtrlStruct != NULL) {
-			codec_type =
-			    ((voip_data_t *) pCtrlStruct)->codec_type;
+			codec_type_ul =
+			    ((voip_data_t *) pCtrlStruct)->codec_type_ul;
+			codec_type_dl =
+			    ((voip_data_t *) pCtrlStruct)->codec_type_dl;
 			bitrate_index = ((voip_data_t *) pCtrlStruct)
 				->bitrate_index;
 		}
 
-		if (codec_type == 0)
-			aud_drv->voip_config.codec_type = CSL_VOIP_PCM;
-		else if (codec_type == 1)
-			aud_drv->voip_config.codec_type = CSL_VOIP_FR;
-		else if (codec_type == 2)
-			aud_drv->voip_config.codec_type = CSL_VOIP_AMR475;
-		else if (codec_type == 3)
-			aud_drv->voip_config.codec_type = CSL_VOIP_G711_U;
-		else if (codec_type == 4)
-			aud_drv->voip_config.codec_type = CSL_VOIP_PCM_16K;
-		else if (codec_type == 5)
-			aud_drv->voip_config.codec_type =
+		if (codec_type_ul == VoIP_Codec_PCM_8K)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_PCM;
+		else if (codec_type_ul == VoIP_Codec_FR)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_FR;
+		else if (codec_type_ul == VoIP_Codec_AMR475)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_AMR475;
+		else if (codec_type_ul == VOIP_Codec_G711_U)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_G711_U;
+		else if (codec_type_ul == VoIP_Codec_PCM_16K)
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_PCM_16K;
+		else if (codec_type_ul == VOIP_Codec_AMR_WB_7K)
+			aud_drv->voip_config.codec_type_ul =
 			   CSL_VOIP_AMR_WB_MODE_7k;
 		else {
-			aTrace(LOG_AUDIO_DRIVER,
-				"AUDIO_DRIVER_ProcessVOIPCmd::Codec Type not supported\n");
-			break;
+			aWarn(
+				"AUDIO_DRIVER_ProcessVOIPCmd::Codec Type not"
+				"supported\n");
+			// break;
+			aud_drv->voip_config.codec_type_ul = CSL_VOIP_PCM_16K;
 		}
 
+		if (codec_type_dl == VoIP_Codec_PCM_8K)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_PCM;
+		else if (codec_type_dl == VoIP_Codec_FR)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_FR;
+		else if (codec_type_dl == VoIP_Codec_AMR475)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_AMR475;
+		else if (codec_type_dl == VOIP_Codec_G711_U)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_G711_U;
+		else if (codec_type_dl == VoIP_Codec_PCM_16K)
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_PCM_16K;
+		else if (codec_type_dl == VOIP_Codec_AMR_WB_7K)
+			aud_drv->voip_config.codec_type_dl =
+			   CSL_VOIP_AMR_WB_MODE_7k;
+		else {
+			aWarn(
+				"AUDIO_DRIVER_ProcessVOIPCmd::Codec Type not"
+				"supported\n");
+			// break;
+			aud_drv->voip_config.codec_type_dl = CSL_VOIP_PCM_16K;
+		}
+
+		if (aud_drv->voip_config.codec_type_ul != aud_drv->voip_config.codec_type_dl)
+			aTrace(LOG_AUDIO_DRIVER, "AUDIO_DRIVER_SET_AMR: VoIPCmd [0x%x:0x%x]\n",
+				aud_drv->voip_config.codec_type_ul, aud_drv->voip_config.codec_type_dl);
+
 		if (inVoLTECall) {
-			aud_drv->voip_config.codec_type +=
+			aud_drv->voip_config.codec_type_ul +=
+				(bitrate_index << 8);
+			aud_drv->voip_config.codec_type_dl +=
 				(bitrate_index << 8);
 			encode_amr_mode = (CSL_VP_Mode_AMR_t)
-				aud_drv->voip_config.codec_type;
+				aud_drv->voip_config.codec_type_ul;
 			encode_amr_mode |= VOLTECALLENABLE;
 #if defined(ENABLE_VOLTE_DTX)
 		if (!isDTXEnabled)
@@ -1523,8 +1688,10 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 			prev_amr_mode = encode_amr_mode;
 			aTrace(LOG_AUDIO_DRIVER,
 				"SET_AMR codec=0x%x\n", encode_amr_mode);
+#ifdef CONFIG_BCM_MODEM
 			VPRIPCMDQ_DSP_AMR_RUN((UInt16) encode_amr_mode,
 					telephony_amr_if2, FALSE);
+#endif
 		}
 	}
 	break;
@@ -1537,12 +1704,10 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 				    ((voip_data_t *) pCtrlStruct)->isDTXEnabled;
 			}
 
-			aTrace(LOG_AUDIO_DRIVER,
-				"AUDDRV_VOIP_SET_DTX: %d\n", (int)isDTXEnabled);
+			aTrace(LOG_AUDIO_DRIVER, "AUDDRV_VOIP_SET_DTX: %d\r\n", (int)isDTXEnabled);
 			result_code = RESULT_OK;
 		}
 		break;
-	
 
 	default:
 		aWarn(
@@ -1726,6 +1891,7 @@ static Result_t AUDIO_DRIVER_ProcessCommonCmd(AUDIO_DDRIVER_t *aud_drv,
 	return result_code;
 }
 
+#if defined(CONFIG_BCM_MODEM)
 /**
  *
  * Function Name: ARM2SP_play_start
@@ -1844,7 +2010,9 @@ static Result_t ARM2SP_play_resume(AUDIO_DDRIVER_t *aud_drv)
 #endif
 	return RESULT_OK;
 }
+#endif
 
+#if defined(CONFIG_BCM_MODEM)
 /**
  *
  * Function Name: VPU_record_start
@@ -1893,6 +2061,7 @@ static Result_t VPU_record_start(VOCAPTURE_start_t capt_start)
 #endif
 	return RESULT_OK;
 }
+#endif
 
 /* DSP interrupt handlers */
 
@@ -2042,7 +2211,7 @@ static void AUDIO_DRIVER_RenderDmaCallback(UInt32 stream_id, UInt32 buffer_idx)
 				"Spurious call back\n");
 		return;
 	}
-	if (pAudDrv->pCallback != NULL) {
+	if (pAudDrv->pCallback != NULL && pAudDrv->pCBPrivate != NULL) {
 #ifdef CONFIG_MAP_VOIP
 		if (pAudDrv->drv_type == AUDIO_DRIVER_PLAY_EPT)	{
 			AUDIO_DRIVER_Stats_t *p = (AUDIO_DRIVER_Stats_t *)
@@ -2057,7 +2226,7 @@ static void AUDIO_DRIVER_RenderDmaCallback(UInt32 stream_id, UInt32 buffer_idx)
 	} else
 		aWarn(
 				"AUDIO_DRIVER_RenderDmaCallback::"
-				"No callback registerd\n");
+				"No callback registerd or invalid pCBPrivate\n");
 
 	spin_unlock_irqrestore(
 		&audio_render_driver[stream_id].audio_lock, flags);
@@ -2073,11 +2242,15 @@ static void AUDIO_DRIVER_RenderDmaCallback(UInt32 stream_id, UInt32 buffer_idx)
  ***************************************************************************/
 void ARM2SP_Render_Request(UInt16 buf_index)
 {
-	Boolean in48K = FALSE;
 	AUDIO_DDRIVER_t *pAudDrv;
 	UInt8 *pSrc = NULL;
-	UInt32 srcIndex, copied_bytes;
+	UInt32 srcIndex;
 	unsigned long flags;
+
+#if defined(CONFIG_BCM_MODEM)
+	Boolean in48K = FALSE;
+	UInt32 copied_bytes;
+#endif
 
 	spin_lock_irqsave(
 		&audio_voice_driver[VORENDER_ARM2SP_INSTANCE1]
@@ -2139,11 +2312,15 @@ void ARM2SP_Render_Request(UInt16 buf_index)
  ***************************************************************************/
 void ARM2SP2_Render_Request(UInt16 buf_index)
 {
-	Boolean in48K = FALSE;
 	AUDIO_DDRIVER_t *pAudDrv;
 	UInt8 *pSrc = NULL;
-	UInt32 srcIndex, copied_bytes;
+	UInt32 srcIndex;
 	unsigned long flags;
+
+#if defined(CONFIG_BCM_MODEM)
+	Boolean in48K = FALSE;
+	UInt32 copied_bytes;
+#endif
 
 	spin_lock_irqsave(
 		&audio_voice_driver[VORENDER_ARM2SP_INSTANCE2]
@@ -2217,7 +2394,7 @@ static void AUDIO_DRIVER_CaptureDmaCallback(UInt32 stream_id, UInt32 buffer_idx)
 #ifdef CONFIG_MAP_VOIP
 		if (audio_capture_driver.
 			aud_drv_p->drv_type == AUDIO_DRIVER_CAPT_EPT) {
-			AUDIO_DRIVER_Stats_t* p = (AUDIO_DRIVER_Stats_t *)
+			AUDIO_DRIVER_Stats_t *p = (AUDIO_DRIVER_Stats_t *)
 				(audio_capture_driver.aud_drv_p->pCBPrivate);
 			/* for debug only, remove from final code */
 			p->dmach = audio_capture_driver.aud_drv_p->stream_id;
@@ -2248,9 +2425,12 @@ void VPU_Capture_Request(UInt16 buf_index)
 {
 	Int32 dest_index, num_bytes_to_copy;
 	UInt8 *pdest_buf;
-	UInt32 recv_size;
 	AUDIO_DDRIVER_t *aud_drv;
 	unsigned long flags;
+
+#if defined(CONFIG_BCM_MODEM)
+	UInt32 recv_size;
+#endif
 
 	if (hrtimer_active(&hr_timer)) /* CP reset */
 		return;
@@ -2264,7 +2444,15 @@ void VPU_Capture_Request(UInt16 buf_index)
 			"VPU_Capture_Request:: Spurious call back\n");
 		return;
 	}
-
+	/* get rid of HW glitch in VPU recording */
+	if (wait_cnt < waitcnt_thold) {
+		spin_unlock_irqrestore(&audio_capture_driver.audio_lock, flags);
+		aTrace(LOG_AUDIO_DRIVER,
+			"VPU_Capture_Request:: wait_cnt = %d, thold=%d\n",
+			wait_cnt, waitcnt_thold);
+		wait_cnt++;
+		return;
+	}
 	/*aTrace(LOG_AUDIO_DRIVER,
 		"VPU_Capture_Request:: buf_index\n", buf_index);
 	aTrace(LOG_AUDIO_DRIVER, " aud_drv->write_index = %d\n",
@@ -2315,6 +2503,7 @@ void VPU_Capture_Request(UInt16 buf_index)
 	return;
 }
 
+#if defined(CONFIG_BCM_MODEM)
 /**
  *
  * Function Name:  VoIP_StartMainAMRDecodeEncode()
@@ -2343,8 +2532,11 @@ static void VoIP_StartMainAMRDecodeEncode(
 	UInt32 dl_timestamp
 )
 {
+	if (encode_amr_mode != decode_amr_mode)
+		aTrace(LOG_AUDIO_DRIVER, "VoIP_StartMainAMRDecodeEncode: [0x%x:0x%x]\n",
+			encode_amr_mode, decode_amr_mode);
+
 	/* decode the next downlink AMR speech data from application */
-#if defined(CONFIG_BCM_MODEM)
 	if (inVoLTECall) {
 		encode_amr_mode |= VOLTECALLENABLE;
 		if (dtx_mode == TRUE)
@@ -2370,8 +2562,8 @@ static void VoIP_StartMainAMRDecodeEncode(
 		VPRIPCMDQ_DSP_AMR_RUN((UInt16) encode_amr_mode,
 				      telephony_amr_if2, FALSE);
 	}
-#endif
 }
+#endif
 
 /**
  *
@@ -2409,6 +2601,7 @@ void AP_ProcessStatusMainAMRDone(UInt16 codecType)
 #endif
 }
 
+#if defined(CONFIG_BCM_MODEM)
 /**
  *
  * Function Name: VOIP_DumpUL_CB
@@ -2447,9 +2640,9 @@ static Boolean VOIP_DumpUL_CB(UInt8 *pSrc, UInt32 amrMode)
 				"VOIP_DumpUL_CB :: Invalid codecType = 0x%x\n",
 				codecType);
 	else {
-//		aTrace(LOG_AUDIO_DRIVER,
-//			"VOIP_DumpUL_CB :: codecType = 0x%x, index = %d\n",
-//			codecType, index);
+		// aTrace(LOG_AUDIO_DRIVER,
+		// 	"VOIP_DumpUL_CB :: codecType = 0x%x, index = %d\n",
+		// 	codecType, index);
 
 		if (inVoLTECall) {
 
@@ -2520,6 +2713,7 @@ static Boolean VOIP_DumpUL_CB(UInt8 *pSrc, UInt32 amrMode)
 	spin_unlock_irqrestore(&audio_voip_driver.audio_lock, flags);
 	return TRUE;
 };
+#endif
 
 /**
  *
@@ -2545,12 +2739,12 @@ static Boolean VOIP_FillDL_CB(UInt32 nFrames)
 				"VOIP_FillDL_CB:: Spurious call back\n");
 		return TRUE;
 	}
-	dlSize = sVoIPDataLen[(aud_drv->voip_config.codec_type & 0xf000) >> 12];
+	dlSize = sVoIPDataLen[(aud_drv->voip_config.codec_type_dl & 0xf000)	>> 12];
 	memset(aud_drv->tmp_buffer, 0, VOIP_MAX_FRAME_LEN);
-	aud_drv->tmp_buffer[0] = aud_drv->voip_config.codec_type;
-	/*aTrace(LOG_AUDIO_DRIVER,
-	"VOIP_FillDL_CB :: aud_drv->codec_type %d, dlSize = %d...\n",
-	aud_drv->voip_config.codec_type, dlSize);*/
+	aud_drv->tmp_buffer[0] = aud_drv->voip_config.codec_type_dl;
+	// aTrace(LOG_AUDIO_DRIVER,
+	// "VOIP_FillDL_CB :: aud_drv->codec_type %d, dlSize = %d...\n",
+	// aud_drv->voip_config.codec_type, dlSize);
 
 	aud_drv->voip_config.pVoipDLCallback(
 		aud_drv->voip_config.pVoIPCBPrivate,
@@ -2564,13 +2758,14 @@ static Boolean VOIP_FillDL_CB(UInt32 nFrames)
 		else
 			dtx_mode = FALSE;
 #endif
-	
+
 #if defined(CONFIG_BCM_MODEM)
 	VoIP_StartMainAMRDecodeEncode((CSL_VP_Mode_AMR_t) aud_drv->voip_config.
-				      codec_type, (UInt8 *) aud_drv->tmp_buffer,
+				      codec_type_dl,
+				      (UInt8 *) aud_drv->tmp_buffer,
 				      dlSize,
 				      (CSL_VP_Mode_AMR_t) aud_drv->voip_config.
-				      codec_type,
+				      codec_type_ul,
 #if defined(ENABLE_VOLTE_DTX)
 					  dtx_mode,
 #else
@@ -2595,6 +2790,7 @@ void VOLTE_ProcessDLData(void)
 	VOIP_FillDL_CB(1);
 }
 
+#if defined(CONFIG_BCM_MODEM)
  /**
   *
   * Function Name: VoLTE_WriteDLData
@@ -2682,13 +2878,16 @@ static void Ptt_FillDL_CB(UInt32 buf_index, UInt32 ptt_flag, UInt32 int_rate)
 		return;
 	}
 	aTrace(LOG_AUDIO_DRIVER, "Int rate-%ld\n", int_rate);
+
 	buf_ptr = CSL_GetULPTTBuffer(buf_index);
+
 	audio_ptt_driver.aud_drv_p->ptt_config.pPttDLCallback(
 		audio_ptt_driver.aud_drv_p->ptt_config.pPttCBPrivate , buf_ptr,
 		PTT_FRAME_SIZE);
 	spin_unlock_irqrestore(&audio_ptt_driver.audio_lock, flags);
 	return;
 }
+#endif
 
 static enum hrtimer_restart TimerCbSendSilence(struct hrtimer *timer)
 {
@@ -2748,6 +2947,7 @@ static enum hrtimer_restart TimerCbSendSilence(struct hrtimer *timer)
 	return HRTIMER_RESTART;
 }
 
+#if defined(CONFIG_BCM_MODEM)
 static void setKtime(UInt16 speechMode, UInt16 framesPerInt)
 {
 	UInt32 ktime_ms;
@@ -2764,8 +2964,6 @@ static void setKtime(UInt16 speechMode, UInt16 framesPerInt)
 			"ktime_ms = %d\n", (int) ktime_ms);
 	ktime = ktime_set(0, MS_TO_NS(ktime_ms));
 }
-
-
 
 static UInt8 getRFCFrameType(UInt16 frame_type,
 		UInt16 amr_codec_mode, Boolean isAMRWB)
@@ -2789,6 +2987,7 @@ static UInt8 getRFCFrameType(UInt16 frame_type,
 
 	return RFC_FrameType;
 }
+
 static Boolean getAMRBandwidth(UInt16 codec_mode)
 {
 	Boolean isAMRWB = FALSE;
@@ -2802,3 +3001,5 @@ static Boolean getAMRBandwidth(UInt16 codec_mode)
 	}
 	return isAMRWB;
 }
+#endif
+

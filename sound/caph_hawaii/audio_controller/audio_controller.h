@@ -54,27 +54,27 @@ enum __AUDCTRL_SSP_BUS_e {
 };
 #define AUDCTRL_SSP_BUS_e enum __AUDCTRL_SSP_BUS_e
 
-enum __AUDCTRL_HW_ACCESS_TYPE_en_t {		// New Controls added at Samsung should start from 30
+enum __AUDCTRL_HW_ACCESS_TYPE_en_t {
 	AUDCTRL_HW_CFG_HEADSET,
 	AUDCTRL_HW_CFG_IHF,
 	AUDCTRL_HW_CFG_SSP,
 	AUDCTRL_HW_CFG_MFD,
 	AUDCTRL_HW_CFG_CLK,
-	AUDCTRL_HW_CFG_WAIT,
+	AUDCTRL_HW_CFG_WAIT = 5,
 	AUDCTRL_HW_CFG_DMA,
 	AUDCTRL_HW_CFG_DUALMIC_REFMIC,
 	AUDCTRL_HW_CFG_DAC_LPBK,
-	AUDCTRL_HW_CFG_DSPMUTE,
-	AUDCTRL_HW_CFG_DHAVEQ1,      // for Call EQ mode(Voice EQ and DHA) first
-	AUDCTRL_HW_CFG_DHAVEQ2,      // for Call EQ mode(Voice EQ and DHA) second
 	AUDCTRL_HW_CFG_DOCKING,
-	AUDCTRL_HW_CFG_EXTRA_VOLUME,
+	AUDCTRL_HW_CFG_EXTRA_VOLUME = 10,
 	AUDCTRL_HW_CFG_ARM2SP,
 	AUDCTRL_HW_CFG_HUB,
 	AUDCTRL_HW_CFG_IHFDL,
 	AUDCTRL_HW_CFG_PRIMARY_MIC,
+	AUDCTRL_HW_CFG_ECHO_REF_MIC = 15,/*to be compatible with capri*/
 	AUDCTRL_HW_CFG_MIC_SEL,
-	AUDCTRL_HW_CFG_ECHO_REF_MIC,
+	AUDCTRL_HW_CFG_DSPMUTE,
+        AUDCTRL_HW_CFG_DHAVEQ1,      // for Call EQ mode(Voice EQ and DHA) first
+	AUDCTRL_HW_CFG_DHAVEQ2,      // for Call EQ mode(Voice EQ and DHA) second
 	/* below are for internal purposes */
 	AUDCTRL_HW_READ_GAIN = 20,
 	AUDCTRL_HW_WRITE_GAIN,
@@ -127,6 +127,7 @@ enum __AUDCTRL_WAIT_e {
 	AUDCTRL_WAIT_HSPMU_ON,
 	AUDCTRL_WAIT_IHFPMU_ON,
 	AUDCTRL_WAIT_PMU_OFF,
+	AUDCTRL_WAIT_TOTAL
 };
 #define AUDCTRL_WAIT_e enum __AUDCTRL_WAIT_e
 
@@ -191,6 +192,27 @@ void AUDCTRL_DisableTelephony(void);
 *
 ****************************************************************************/
 void AUDCTRL_Telephony_RateChange(unsigned int sample_rate);
+
+/**
+*  @brief  the Set/Reset flag for Restarting Playback
+*
+*  @param  flag		(in) True/False
+*
+*  @return none
+*
+****************************************************************************/
+
+void AUDCTRL_SetRestartPlaybackFlag(Boolean flag);
+
+/**
+*  @brief  get the flag for restarting playback
+*
+*  @param  none
+*
+*  @return whether Playback has to be restarted
+*
+****************************************************************************/
+Boolean AUDCTRL_GetRestartPlaybackFlag(void);
 
 /**
 *  @brief  the rate change request function called by CAPI message listener
@@ -335,6 +357,14 @@ void AUDCTRL_SaveAudioMode(AudioMode_t mode);
 *      @return         none
 **********************************************************************/
 void AUDCTRL_SetAudioMode(AudioMode_t mode, AudioApp_t app);
+/*********************************************************************
+*   Set (voice call) audio mode
+*      @param          mode            (voice call) audio mode
+*      @param          app             (voice call) audio app
+*      @return         none
+**********************************************************************/
+void AUDCTRL_SetAudioModeBT(AudioMode_t mode, AudioApp_t app);
+
 
 /**
 *   Set audio mode for music playback. (no DSP voice)
@@ -405,7 +435,9 @@ void AUDCTRL_GetSrcSinkByMode(AudioMode_t mode, AUDIO_SOURCE_Enum_t *pMic,
 void AUDCTRL_EnablePlay(AUDIO_SOURCE_Enum_t source,
 			AUDIO_SINK_Enum_t sink,
 			AUDIO_NUM_OF_CHANNEL_t numCh,
-			AUDIO_SAMPLING_RATE_t sr, unsigned int *pPathID);
+			AUDIO_SAMPLING_RATE_t sr,
+			AUDIO_BITS_PER_SAMPLE_t bitsPerSample,
+			unsigned int *pPathID);
 
 /********************************************************************
 *  @brief  Disable a playback path
@@ -876,6 +908,16 @@ void AUDCTRL_UpdateUserVolSetting(
 *
 ****************************************************************************/
 Boolean AUDCTRL_GetCPResetState(void);
+
+/********************************************************************
+*  @brief  Return Audio Path reset pending state.
+*
+*  @param
+*
+*  @return TRUE/FALSE : in/out Audio Path reset pending
+*
+****************************************************************************/
+Boolean AUDCTRL_GetAudioPathResetPendingState(void);
 
 /********************************************************************
 *  @brief  Register callback for resetting callmode due to CP reset

@@ -32,8 +32,8 @@
 *
 ****************************************************************************/
 
+#include <linux/delay.h>
 #include "mobcom_types.h"
-
 #include <plat/chal/chal_types.h>
 #include <mach/kona_headset_pd.h>
 #include "chal_caph.h"
@@ -68,6 +68,7 @@
 static CSL_CAPH_AUDIOH_Path_t path[AUDDRV_PATH_TOTAL];
 static CHAL_HANDLE handle = 0x0;
 static Boolean isSTIHF = FALSE;
+static int wait_dmic_on = 150*1000;
 
 /*-
 //Microphone status:
@@ -541,7 +542,8 @@ void csl_caph_audioh_config(int path_id, void *p)
 
 		/* enable vin path interrupt */
 		chal_audio_vinpath_int_enable(handle, TRUE, FALSE);
-		chal_audio_vinpath_set_mono_stereo(handle, pcfg->sample_mode);
+		chal_audio_vinpath_set_mono_stereo(handle,
+						((pcfg->sample_mode == AUDIO_CHANNEL_STEREO) ? FALSE : TRUE));
 
 		/*  add threshold at here  */
 
@@ -567,7 +569,8 @@ void csl_caph_audioh_config(int path_id, void *p)
 		chal_audio_nvinpath_int_enable(handle, TRUE, FALSE);
 
 		/* enable vin path interrupt */
-		chal_audio_nvinpath_set_mono_stereo(handle, pcfg->sample_mode);
+		chal_audio_nvinpath_set_mono_stereo(handle,
+						((pcfg->sample_mode == AUDIO_CHANNEL_STEREO) ? FALSE : TRUE));
 
 		/*  add threshold at here  */
 		chal_audio_nvinpath_set_fifo_thres(handle, 0x2, 0x0);
@@ -796,7 +799,7 @@ CSL_CAPH_AUDIOH_BUFADDR_t csl_caph_audioh_get_fifo_addr(int path_id)
 // Return:
 //
 //===========================================================================*/
-void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
+void csl_caph_audioh_start(int path_id)
 {
 	UInt16 chnl_enable = 0x0;
 
@@ -902,8 +905,8 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		/* DMIC0CLK/DMIC0CQ can control both DMIC1 and DMIC2.*/
 		chal_audio_dmic1_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
-		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable,
-						clock_phase_rev);
+		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable);
+		usleep_range(wait_dmic_on, wait_dmic_on+20000);
 		micStatus |= 0x3;
 		break;
 
@@ -912,8 +915,8 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		/* DMIC0CLK/DMIC0CQ can control both DMIC1 and DMIC2.*/
 		chal_audio_dmic1_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
-		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable,
-						clock_phase_rev);
+		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable);
+		usleep_range(wait_dmic_on, wait_dmic_on+20000);
 		micStatus |= 0x1;
 		break;
 
@@ -922,8 +925,8 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		/* DMIC0CLK/DMIC0CQ can control both DMIC1 and DMIC2.*/
 		chal_audio_dmic1_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
-		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable,
-						clock_phase_rev);
+		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable);
+		usleep_range(wait_dmic_on, wait_dmic_on+20000);
 		micStatus |= 0x2;
 		break;
 
@@ -934,6 +937,7 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		chal_audio_dmic2_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
 		chal_audio_nvinpath_digi_mic_enable(handle, chnl_enable);
+		usleep_range(wait_dmic_on, wait_dmic_on+20000);
 		micStatus |= 0xC;
 		break;
 
@@ -943,6 +947,7 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		chal_audio_dmic2_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
 		chal_audio_nvinpath_digi_mic_enable(handle, chnl_enable);
+		usleep_range(wait_dmic_on, wait_dmic_on+20000);
 		micStatus |= 0x4;
 		break;
 
@@ -952,6 +957,7 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		chal_audio_dmic2_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone  */
 		chal_audio_nvinpath_digi_mic_enable(handle, chnl_enable);
+		usleep_range(wait_dmic_on, wait_dmic_on+20000);
 		micStatus |= 0x8;
 		break;
 
@@ -962,7 +968,9 @@ void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 		break;
 
 	case AUDDRV_PATH_HEADSET_INPUT:
+#ifndef JAVA_ZEBU_TEST
 		switch_bias_voltage(TRUE);
+#endif
 		chal_audio_hs_mic_pwrctrl(handle, TRUE);
 		chal_audio_vinpath_select_primary_mic(handle,
 						      CHAL_AUDIO_ENABLE);
@@ -1124,7 +1132,9 @@ static void csl_caph_audioh_stop_keep_config(int path_id)
 		break;
 
 	case AUDDRV_PATH_HEADSET_INPUT:
+#ifndef JAVA_ZEBU_TEST
 		switch_bias_voltage(FALSE);
+#endif
 		chal_audio_vinpath_select_primary_mic(handle, 0);
 		chal_audio_hs_mic_pwrctrl(handle, 0);
 		break;
@@ -1820,7 +1830,7 @@ void csl_caph_audioh_sidetone_set_gain(UInt32 gain)
 
 void csl_caph_audioh_vinpath_digi_mic_enable(UInt16 ctrl)
 {
-	chal_audio_vinpath_digi_mic_enable(handle, ctrl, 0);
+	chal_audio_vinpath_digi_mic_enable(handle, ctrl);
 	return;
 }
 /*============================================================================

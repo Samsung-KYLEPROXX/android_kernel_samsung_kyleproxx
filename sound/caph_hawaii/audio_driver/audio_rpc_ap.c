@@ -53,7 +53,7 @@ Copyright 2009 - 2011  Broadcom Corporation
 #include "ipcinterface.h"
 
 /*when system is busy, 50ms is not enough*/
-#define AUDIO_ENABLE_RESP_TIMEOUT 2000
+#define AUDIO_ENABLE_RESP_TIMEOUT 1000
 #define	timeout_jiff msecs_to_jiffies(AUDIO_ENABLE_RESP_TIMEOUT)
 
 /* If this struct is changed then please change xdr_Audio_Params_t() also. */
@@ -154,9 +154,9 @@ void HandleAudioEventrespCb(RPC_Msg_t *pMsg,
 			addr);
 		AUDDRV_SetTuningFlag(0);
 		if (csl_caph_hwctrl_allPathsDisabled() == TRUE) {
-			csl_caph_ControlHWClock(FALSE);
-			csl_ControlHWClock_156m(FALSE);
 			csl_ControlHWClock_2p4m(FALSE);
+			csl_ControlHWClock_156m(FALSE);
+			csl_caph_ControlHWClock(FALSE);
 		}
 	}
 
@@ -231,7 +231,7 @@ void HandleAudioEventReqCb(RPC_Msg_t *pMsg,
 	RPC_SYSFreeResultDataBuffer(dataBufHandle);
 #endif
 }
-
+#if defined(CONFIG_BCM_MODEM)
 static void HandleAudioRpcNotification(
 	struct RpcNotificationEvent_t event, UInt8 clientID)
 {
@@ -264,7 +264,7 @@ static void HandleAudioRpcNotification(
 		break;
 	}
 }
-
+#endif
 #if defined(AUDIO_RPC_END_POINT)
 static RPC_Result_t AUDIO_RPC_MsgCb(PACKET_Interface_t interfaceType,
 		UInt8 cid, PACKET_BufHandle_t dataBufHandle)
@@ -631,9 +631,7 @@ UInt32 audio_control_dsp(UInt32 param1, UInt32 param2, UInt32 param3,
 				BUG_ON(1);
 				panic("COMMAND_AUDIO_ENABLE timeout");
 				*/
-			}else {
-				set_flag_dsp_timeout(0);
- 			}
+			}
 #if defined(ENABLE_DMA_VOICE)
 			{
 				UInt16 dsp_path;
