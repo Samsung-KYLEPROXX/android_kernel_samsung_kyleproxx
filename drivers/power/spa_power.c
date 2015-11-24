@@ -224,12 +224,11 @@ int get_spa_chg_status()
 	
 	spa_power_iter = g_spa_power;
 
-	if( spa_power_iter->charging_status.status == SPA_STATUS_SUSPEND_TEMP_COLD || spa_power_iter->charging_status.status == SPA_STATUS_SUSPEND_TEMP_HOT)
-		if( spa_power_iter->charging_status.phase ==POWER_SUPPLY_STATUS_NOT_CHARGING)
-		{
-			printk("%s : change [FG] batt_status to discharg\n",__func__);
-			return 1;
-		}
+	if( spa_power_iter->charging_status.phase ==POWER_SUPPLY_STATUS_NOT_CHARGING)
+	{
+		printk("%s : change [FG] batt_status to discharg\n",__func__);
+		return 1;
+	}
 
 	return 0;	
 }
