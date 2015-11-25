@@ -319,6 +319,7 @@ struct avg_sample_buff {
 #ifdef CONFIG_DEBUG_FS
 struct fg_probes {
 	int volt_avg;
+	int soc_error;
 	int adj_factor;
 	int temp_factor;
 	int capacity_delta;
@@ -409,7 +410,7 @@ struct bcmpmu_fg_data {
 	u64 last_sample_ocv_tm;
 	long int delta_volt;
 	int poll_interval;
-	u64 suspend_tm;
+	u64 last_pw_tm;
 };
 
 #ifdef CONFIG_DEBUG_FS
@@ -1857,6 +1858,9 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 			(capacity_delta > GUARD_BAND_LOW_THRLD)) {
 		fg->cal_high_clr_cnt = 0;
 		pr_fg(FLOW, "clear cal_high_clr_cnt\n");
+	} else if (fg->flags.high_bat_cal &&
+		fg->prev_cap_delta > capacity_delta) {
+		fg->flags.calibration = true;
 	}
 
 	pr_fg(FLOW, "%s : cal_high_bat_cnt %d cal_high_clr_cnt %d\n",
@@ -1864,6 +1868,10 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 
 	pr_fg(FLOW, "%s : cal_low_bat_cnt %d cal_low_clr_cnt %d\n",
 			__func__, fg->cal_low_bat_cnt, fg->cal_low_clr_cnt);
+
+#ifdef CONFIG_DEBUG_FS
+	fg->probes.soc_error = capacity_delta;
+#endif
 
 	fg->prev_cap_delta = capacity_delta;
 }
@@ -2016,7 +2024,6 @@ static void bcmpmu_fg_get_coulomb_counter(struct bcmpmu_fg_data *fg)
 			fg->capacity_info.percentage);
 }
 
-/* Stopped here */
 int bcmpmu_fg_get_current_capacity(struct bcmpmu59xxx *bcmpmu)
 {
 	struct bcmpmu_fg_data *fg;
@@ -2221,7 +2228,6 @@ static int bcmpmu_fg_set_eoc_thrd(struct bcmpmu_fg_data *fg, int curr)
 	return ret;
 }
 
-#if 0
 static int bcmpmu_fg_set_sw_eoc_condition(struct bcmpmu_fg_data *fg, bool sw_eoc)
 {
 	int ret;
@@ -2239,7 +2245,6 @@ static int bcmpmu_fg_set_sw_eoc_condition(struct bcmpmu_fg_data *fg, bool sw_eoc
 
 	return ret;
 }
-#endif
 
 static int bcmpmu_fg_set_maintenance_chrgr_mode(struct bcmpmu_fg_data *fg,
 		enum maintenance_chrgr_mode mode)
@@ -2729,14 +2734,15 @@ static int bcmpmu_fg_sw_maint_charging_algo(struct bcmpmu_fg_data *fg)
 		if ((fg->bcmpmu->flags & BCMPMU_SPA_EN) &&
 				(flags->eoc_chargr_en)) {
 			pr_fg(FLOW, "sw_maint_chrgr: SPA SW EOC cleared\n");
+			bcmpmu_fg_set_sw_eoc_condition(fg, false);
 			flags->fg_eoc = false;
 		} else if (!(fg->bcmpmu->flags & BCMPMU_SPA_EN) &&
 				(volt < volt_thrld)) {
 			pr_fg(FLOW, "sw_maint_chrgr: SW EOC cleared\n");
+			bcmpmu_fg_set_sw_eoc_condition(fg, false);
 			flags->prev_batt_status = flags->batt_status;
 			flags->batt_status = POWER_SUPPLY_STATUS_CHARGING;
 			flags->fg_eoc = false;
-			//bcmpmu_fg_set_sw_eoc_condition(fg, false);
 			bcmpmu_chrgr_usb_en(fg->bcmpmu, 1);
 		}
 	} else if ((!flags->fg_eoc) &&
@@ -2803,7 +2809,7 @@ static int bcmpmu_fg_sw_maint_charging_algo(struct bcmpmu_fg_data *fg)
 		 * Tell PMU that EOC condition has happened
 		 * so that safetly timers can be cleared
 		 */
-		//bcmpmu_fg_set_sw_eoc_condition(fg, true);
+		bcmpmu_fg_set_sw_eoc_condition(fg, true);
 
 		if (fg->bcmpmu->flags & BCMPMU_SPA_EN) {
 			bcmpmu_post_spa_event_to_queue(fg->bcmpmu,
@@ -3387,6 +3393,8 @@ static void bcmpmu_fg_periodic_work(struct work_struct *work)
 
 	if (fg->flags.calibration)
 		bcmpmu_fg_batt_cal_algo(fg);
+
+	fg->last_pw_tm = kona_hubtimer_get_counter();
 
 	pr_fg(VERBOSE, "flags: %d %d %d %d %d %d %d %d %d %d %d %d\n",
 			flags.batt_status,
@@ -3981,6 +3989,21 @@ static const struct file_operations fg_capacity_delta_fops = {
 	.read = debugfs_get_capacity_delta,
 };
 
+static int debugfs_get_soc_error(struct file *file, char __user *buf,
+	size_t len, loff_t *ppos)
+{
+	struct bcmpmu_fg_data *fg = file->private_data;
+	char buff[16];
+
+	snprintf(buff, sizeof(buff), "%d\n", fg->probes.soc_error);
+	return simple_read_from_buffer(buf, len, ppos, buff, strlen(buff));
+}
+
+static const struct file_operations fg_soc_error_fops = {
+	.open = debugfs_fg_open,
+	.read = debugfs_get_soc_error,
+};
+
 static int debugfs_get_qfc(void *data, u64 *capacity)
 {
 	struct bcmpmu_fg_data *fg = data;
@@ -4140,6 +4163,12 @@ static void bcmpmu_fg_debugfs_init(struct bcmpmu_fg_data *fg)
 	if (IS_ERR_OR_NULL(dentry_fg_file))
 		goto debugfs_clean;
 
+	dentry_fg_file = debugfs_create_file("soc_error",
+			DEBUG_FS_PERMISSIONS, dentry_fg_dir,
+			fg, &fg_soc_error_fops);
+	if (IS_ERR_OR_NULL(dentry_fg_file))
+		goto debugfs_clean;
+
 	dentry_fg_file = debugfs_create_file("qfc_cap",
 			DEBUG_FS_PERMISSIONS, dentry_fg_dir, fg,
 			&fg_qfc_fops);
@@ -4207,7 +4236,7 @@ static int bcmpmu_fg_resume(struct platform_device *pdev)
 	FG_UNLOCK(fg);
 
 	t_now = kona_hubtimer_get_counter();
-	t_ms = ((t_now - fg->suspend_tm) * 1000)/CLOCK_TICK_RATE;
+	t_ms = ((t_now - fg->last_pw_tm) * 1000)/CLOCK_TICK_RATE;
 
 	/* When suspend fails, resume is performed almost immediately.
 	 * Delay start of periodic work if time elapsed from suspend is
@@ -4233,9 +4262,8 @@ static int bcmpmu_fg_suspend(struct platform_device *pdev, pm_message_t state)
 	fg->flags.reschedule_work = false;
 	FG_UNLOCK(fg);
 
-	fg->suspend_tm = kona_hubtimer_get_counter();
 
-	flush_delayed_work_sync(&fg->fg_periodic_work);
+	cancel_delayed_work_sync(&fg->fg_periodic_work);
 	return 0;
 }
 #else
