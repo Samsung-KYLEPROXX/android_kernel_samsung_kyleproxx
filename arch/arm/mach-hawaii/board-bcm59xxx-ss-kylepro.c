@@ -1147,14 +1147,14 @@ static struct batt_temp_curr_map ys_05_temp_curr_lut[] = {
  * open-voltage-circuit capacity should be larger than 50 or 30 per cent
  * (temperature dependent) which is insanely big.
  *
- * We reduce the guardbands to half of the origianl values. Now the calibration
- * is triggered when absolute difference in capacities exceeds 25 or 15 percent,
+ * We reduce the guardbands to a third of the original values. Now the calibration
+ * is triggered when absolute difference in capacities exceeds 16 or 10 percent,
  * depending on the temperature.
  */
 static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	{
 		.temp = -200,
-		.reset = 0, .fct = 271, .guardband = 50/2,
+		.reset = 0, .fct = 271, .guardband = 50/3,
 		.esr_vl_lvl = 3828, .esr_vm_lvl = 4040, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -9455, .esr_vl_offset = 38482,
 		.esr_vm_slope = -625,  .esr_vm_offset = 4680,
@@ -1163,7 +1163,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = -150,
-		.reset = 0, .fct = 451, .guardband = 50/2,
+		.reset = 0, .fct = 451, .guardband = 50/3,
 		.esr_vl_lvl = 3828, .esr_vm_lvl = 4084, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -11415, .esr_vl_offset = 44972,
 		.esr_vm_slope = 491,    .esr_vm_offset = -604,
@@ -1172,7 +1172,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = -100,
-		.reset = 0, .fct = 631, .guardband = 50/2,
+		.reset = 0, .fct = 631, .guardband = 50/3,
 		.esr_vl_lvl = 3828, .esr_vm_lvl = 4084, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -11415, .esr_vl_offset = 44972,
 		.esr_vm_slope =  491,   .esr_vm_offset = -604,
@@ -1181,7 +1181,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = -50,
-		.reset = 0, .fct = 744, .guardband = 50/2,
+		.reset = 0, .fct = 744, .guardband = 50/3,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4084,
 		.esr_vl_slope = -36494, .esr_vl_offset = 135322,
 		.esr_vm_slope = -8143,  .esr_vm_offset = 31855,
@@ -1190,7 +1190,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = 0,
-		.reset = 0, .fct = 856, .guardband = 30/2,
+		.reset = 0, .fct = 856, .guardband = 30/3,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4084,
 		.esr_vl_slope = -36494, .esr_vl_offset = 135322,
 		.esr_vm_slope = -8143,  .esr_vm_offset = 31855,
@@ -1199,7 +1199,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = 50,
-		.reset = 0, .fct = 919, .guardband = 30/2,
+		.reset = 0, .fct = 919, .guardband = 30/3,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4040,
 		.esr_vl_slope = -13420, .esr_vl_offset = 50225,
 		.esr_vm_slope = -4633,  .esr_vm_offset = 18157,
@@ -1208,7 +1208,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = 100,
-		.reset = 0, .fct = 981, .guardband = 30/2,
+		.reset = 0, .fct = 981, .guardband = 30/3,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4040,
 		.esr_vl_slope = -13420, .esr_vl_offset = 50225,
 		.esr_vm_slope = -4633,  .esr_vm_offset = 18157,
@@ -1217,7 +1217,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = 150,
-		.reset = 0, .fct = 991, .guardband = 30/2,
+		.reset = 0, .fct = 991, .guardband = 30/3,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3770, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -2627, .esr_vl_offset = 10179,
 		.esr_vm_slope = -2399, .esr_vm_offset = 9347,
@@ -1226,7 +1226,7 @@ static struct batt_esr_temp_lut ss_kylepro_esr_temp_lut[] = {
 	},
 	{
 		.temp = 200,
-		.reset = 0, .fct = 1000, .guardband = 30/2,
+		.reset = 0, .fct = 1000, .guardband = 30/3,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3770, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -2627, .esr_vl_offset = 10179,
 		.esr_vm_slope = -2399, .esr_vm_offset = 9347,
@@ -1298,7 +1298,7 @@ static struct bcmpmu_fg_pdata fg_pdata = {
 	.cal_data = &ss_kylepro_cal_data,
 	.sns_resist = 10,
 	.sys_impedence = 33,
-	/* End of charge current in mA */ /* Samsung spec TBD */
+	/* End of charge current in mA */ /* According to table above it is 85 mA */
 	.eoc_current = 100,
 	/* enable HW EOC of PMU */
 	.hw_maintenance_charging = false,
