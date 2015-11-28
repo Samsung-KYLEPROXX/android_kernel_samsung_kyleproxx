@@ -1066,36 +1066,36 @@ struct bcmpmu_acld_pdata acld_pdata = {
 /* SS B100BE profile */
 /* Logan rev 02 battery profile CSP 626787 */
 static struct batt_volt_cap_map ss_kyleprods_volt_cap_lut[] = {
-	{4321, 100},
-	{4250, 95},
-	{4183, 90},
-	{4126, 85},
-	{4082, 80},
-	{4038, 75},
-	{3993, 70},
-	{3952, 65},
-	{3914, 60},
-	{3862, 55},
-	{3826, 50},
-	{3804, 45},
-	{3787, 40},
-	{3775, 35},
-	{3769, 30},
-	{3764, 26},
-	{3746, 21},
-	{3708, 16},
-	{3654, 11},
-	{3647, 10},
-	{3643, 9},
-	{3636, 8},
-	{3628, 7},
-	{3616, 6},
-	{3599, 5},
-	{3578, 4},
-	{3552, 3},
-	{3517, 2},
-	{3466, 1},
-	{3400, 0},
+    {4321, 100, 3803},
+    {4250, 95, 4836},
+    {4183, 90, 3789},
+    {4126, 85, 6136},
+    {4082, 80, 6136},
+    {4038, 75, 6000},
+    {3993, 70, 6585},
+    {3952, 65, 7105},
+    {3914, 60, 5192},
+    {3862, 55, 7500},
+    {3826, 50, 12273},
+    {3804, 45, 15882},
+    {3787, 40, 22500},
+    {3775, 35, 45000},
+    {3769, 30, 43200},
+    {3764, 26, 15000},
+    {3746, 21, 7105},
+    {3708, 16, 5000},
+    {3654, 11, 7714},
+    {3647, 10, 13500},
+    {3643, 9, 7714},
+    {3636, 8, 6750},
+    {3628, 7, 4500},
+    {3616, 6, 3176},
+    {3599, 5, 2571},
+    {3578, 4, 2077},
+    {3552, 3, 1543},
+    {3517, 2, 1059},
+    {3466, 1, 818},
+    {3400, 0, 1},
 };
 
 static struct batt_eoc_curr_cap_map ss_kyleprods_eoc_cap_lut[] = {
@@ -1113,7 +1113,13 @@ static struct batt_eoc_curr_cap_map ss_kyleprods_eoc_cap_lut[] = {
 	 {0, 100},
 };
 
-
+/* From board-bcm59xxx_brooks.c
+ * Loaded OCV LUT table with 175 mA of discharge load
+ * Cutoff = OCV - ESR(OCV, 20 degC) * 175mA
+ *
+ * For Kylepro, it seems to be
+ * Cutoff = OCV - ESR(OCV, 20 degC) * 40mA
+ */
 static struct batt_cutoff_cap_map ss_kyleprods_cutoff_cap_lut[] = {
 	{3480, 2},
 	{3440, 1},
@@ -1130,10 +1136,21 @@ static struct batt_temp_curr_map ys_05_temp_curr_lut[] = {
 
 /* SS B100BE profile */
 
+/* The driver uses absolute values of capacity difference for calibration
+ * The manufacturer uses high values of guardband which results in situation
+ * where calibration is practically never done. To trigger calibration the
+ * capacity difference between coulomb-counter-based capacity and
+ * open-voltage-circuit capacity should be larger than 50 or 30 per cent
+ * (temperature dependent) which is insanely big.
+ *
+ * We reduce the guardbands to a tenth of the origianl values. Now the calibration
+ * is triggered when absolute difference in capacities exceeds 5 or 3 percent,
+ * depending on the temperature.
+ */
 static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	{
 		.temp = -200,
-		.reset = 0, .fct = 271, .guardband = 50,
+		.reset = 0, .fct = 271, .guardband = 50/10,
 		.esr_vl_lvl = 3828, .esr_vm_lvl = 4040, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -9455, .esr_vl_offset = 38482,
 		.esr_vm_slope = -625,  .esr_vm_offset = 4680,
@@ -1142,7 +1159,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = -150,
-		.reset = 0, .fct = 451, .guardband = 50,
+		.reset = 0, .fct = 451, .guardband = 50/10,
 		.esr_vl_lvl = 3828, .esr_vm_lvl = 4084, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -11415, .esr_vl_offset = 44972,
 		.esr_vm_slope = 491,    .esr_vm_offset = -604,
@@ -1151,7 +1168,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = -100,
-		.reset = 0, .fct = 631, .guardband = 50,
+		.reset = 0, .fct = 631, .guardband = 50/10,
 		.esr_vl_lvl = 3828, .esr_vm_lvl = 4084, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -11415, .esr_vl_offset = 44972,
 		.esr_vm_slope =  491,   .esr_vm_offset = -604,
@@ -1160,7 +1177,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = -50,
-		.reset = 0, .fct = 744, .guardband = 50,
+		.reset = 0, .fct = 744, .guardband = 50/10,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4084,
 		.esr_vl_slope = -36494, .esr_vl_offset = 135322,
 		.esr_vm_slope = -8143,  .esr_vm_offset = 31855,
@@ -1169,7 +1186,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = 0,
-		.reset = 0, .fct = 856, .guardband = 30,
+		.reset = 0, .fct = 856, .guardband = 30/10,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4084,
 		.esr_vl_slope = -36494, .esr_vl_offset = 135322,
 		.esr_vm_slope = -8143,  .esr_vm_offset = 31855,
@@ -1178,7 +1195,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = 50,
-		.reset = 0, .fct = 919, .guardband = 30,
+		.reset = 0, .fct = 919, .guardband = 30/10,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4040,
 		.esr_vl_slope = -13420, .esr_vl_offset = 50225,
 		.esr_vm_slope = -4633,  .esr_vm_offset = 18157,
@@ -1187,7 +1204,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = 100,
-		.reset = 0, .fct = 981, .guardband = 30,
+		.reset = 0, .fct = 981, .guardband = 30/10,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3828, .esr_vh_lvl = 4040,
 		.esr_vl_slope = -13420, .esr_vl_offset = 50225,
 		.esr_vm_slope = -4633,  .esr_vm_offset = 18157,
@@ -1196,7 +1213,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = 150,
-		.reset = 0, .fct = 991, .guardband = 30,
+		.reset = 0, .fct = 991, .guardband = 30/10,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3770, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -2627, .esr_vl_offset = 10179,
 		.esr_vm_slope = -2399, .esr_vm_offset = 9347,
@@ -1205,7 +1222,7 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 	{
 		.temp = 200,
-		.reset = 0, .fct = 1000, .guardband = 30,
+		.reset = 0, .fct = 1000, .guardband = 30/10,
 		.esr_vl_lvl = 3650, .esr_vm_lvl = 3770, .esr_vh_lvl = 4250,
 		.esr_vl_slope = -2627, .esr_vl_offset = 10179,
 		.esr_vm_slope = -2399, .esr_vm_offset = 9347,
@@ -1214,6 +1231,11 @@ static struct batt_esr_temp_lut ss_kyleprods_esr_temp_lut[] = {
 	},
 };
 
+/* Flat region defined to be: A 25mV change in OCV shall not give more than
+ * 5% change in capacity.
+ * For SS B100BE battery this corresponds to OCV capacity range of [21, 50]%
+ */
+
 /* SS B100BE profile */
 static struct bcmpmu_batt_property ss_kyleprods_props = {
 	.model = "SS B100BE",
@@ -1221,6 +1243,9 @@ static struct bcmpmu_batt_property ss_kyleprods_props = {
 	.max_volt = 4350,
 	.full_cap = 1500 * 3600,
 	.one_c_rate = 1500,
+	.enable_flat_ocv_soc = true,
+	.flat_ocv_soc_high = 50,
+	.flat_ocv_soc_low = 21,
 	.volt_cap_lut = ss_kyleprods_volt_cap_lut,
 	.volt_cap_lut_sz = ARRAY_SIZE(ss_kyleprods_volt_cap_lut),
 	.esr_temp_lut = ss_kyleprods_esr_temp_lut,
@@ -1240,10 +1265,17 @@ static struct bcmpmu_batt_cap_levels ss_kyleprods_cap_levels = {
 
 /* SS B100BE profile */
 static struct bcmpmu_batt_volt_levels ss_kyleprods_volt_levels = {
-	.critical = 3400,
-	.low = 3500,
-	.normal = 3700,
-	.high   = 4300,
+	/* From board-bcm59xxx_brooks.c
+	 * Loaded OCV LUT table with .sleep_current_ua of discharge load
+	 * Voltage = OCV - ESR(OCV, 20 degC) * 4.5 mA
+	 *
+	 * For Kylepro, .sleep_current_ua = 1.46 mA, so
+	 * Voltage = OCV - ESR(OCV, 20 degC) * 1.46 mA
+	 */
+	.critical = 3600, /* 5 % loaded OCV LUT level, not used in bcmpmu-fg.c */
+	.low = 3700, /* 15 % loaded OCV LUT level */
+	.normal = 3800, /* 45 % loaded OCV LUT level, not used in bcmpmu-fg.c */
+	.high   = 4300, /* 95 % loaded OCV LUT level */	.critical = 3400,
 	.crit_cutoff_cnt = 3,
 	.vfloat_lvl = 0x14, /* 4.345 V */
 	.vfloat_max = 0x14,
@@ -1251,8 +1283,8 @@ static struct bcmpmu_batt_volt_levels ss_kyleprods_volt_levels = {
 };
 
 static struct bcmpmu_batt_cal_data ss_kyleprods_cal_data = {
-	.volt_low = 3550,
-	.cap_low = 5,  /* lower entering low calibration */
+	.volt_low = 3700, /* OCV at roughly 15 per cent capacity */
+	.cap_low = 15,  /* entering low calibration if below .cap_low */
 };
 
 static struct bcmpmu_fg_pdata fg_pdata = {
@@ -1262,7 +1294,7 @@ static struct bcmpmu_fg_pdata fg_pdata = {
 	.cal_data = &ss_kyleprods_cal_data,
 	.sns_resist = 10,
 	.sys_impedence = 33,
-	/* End of charge current in mA */ /* Samsung spec TBD */
+	/* End of charge current in mA */ /* According to table above it is 85 mA */
 	.eoc_current = 100,
 	/* enable HW EOC of PMU */
 	.hw_maintenance_charging = false,
@@ -1271,8 +1303,8 @@ static struct bcmpmu_fg_pdata fg_pdata = {
 	.sleep_sample_rate = 32000,
 	.fg_factor = 964, /* KyleProDS */
 
-	.poll_rate_low_batt =  120000, /* every 120 seconds */
-	.poll_rate_crit_batt = 5000, /* every 5 Seconds */
+	.poll_rate_low_batt =  5000, /* every 5 seconds */
+	.poll_rate_crit_batt = 2000, /* every 2 Seconds */
 };
 
 struct bcmpmu59xxx_accy_pdata accy_pdata = {
