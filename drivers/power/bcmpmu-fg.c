@@ -133,7 +133,7 @@
 #define BATT_VFLOAT_DEFAULT		0xC
 #define BATT_MIN_EOC_VOLT		4116
 #define CAL_CNT_THRESHOLD		3
-#define GUARD_BAND_LOW_THRLD		10
+#define GUARD_BAND_LOW_THRLD		3
 #define CRIT_CUTOFF_CNT_THRD		3
 #define LOW_VOLT_CNT_THRD		2
 #define FG_DUMMY_BAT_CAP		30
@@ -1235,9 +1235,7 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 	 * 	In case of charging, calculate esr for each zone and
 	 * 	qualify it for right zone
 	 */
-	if ((!fg->flags.init_ocv) ||
-		((curr < 0) && !fg->flags.chrgr_connected)) {
-
+	if (!fg->flags.init_ocv) {
 		slope = lut[idx].esr_vl_slope;
 		offset = lut[idx].esr_vl_offset;
 		ocv = bcmpmu_fg_get_esr_to_ocv(volt, curr, offset, slope);
@@ -1259,6 +1257,59 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 		slope = lut[idx].esr_vf_slope;
 		offset = lut[idx].esr_vf_offset;
 		ocv = bcmpmu_fg_get_esr_to_ocv(volt, curr, offset, slope);
+	} else if ((curr < 0) && !fg->flags.chrgr_connected) {
+		curr = (fg->ibat_avg
+			== FAKE_IBAT_INTIAL_AVG) ? curr : -fg->ibat_avg;
+		esr_vl = bcmpmu_fg_get_esr_from_ocv(lut[idx].esr_vl_lvl,
+			lut[idx].esr_vl_offset,
+			lut[idx].esr_vl_slope,
+			ESR_VL_PER_MARGIN);
+
+		esr_vf = bcmpmu_fg_get_esr_from_ocv(max_volt,
+			lut[idx].esr_vf_offset,
+			lut[idx].esr_vf_slope,
+			ESR_VF_PER_MARGIN);
+
+		pr_fg(VERBOSE, "esr_vf: %d esr_vl: %d\n", esr_vf, esr_vl);
+
+		slope = lut[idx].esr_vl_slope;
+		offset = lut[idx].esr_vl_offset;
+		esr = bcmpmu_fg_get_esr(volt, curr, offset, slope);
+		if ((esr > esr_vf) && (esr <= esr_vl)) {
+			ocv =
+			bcmpmu_fg_get_esr_to_ocv_with_cap(fg, volt, curr, esr);
+			if ((ocv <= lut[idx].esr_vl_lvl) && (ocv >= min_volt))
+				goto exit;
+		}
+
+		slope = lut[idx].esr_vm_slope;
+		offset = lut[idx].esr_vm_offset;
+		esr = bcmpmu_fg_get_esr(volt, curr, offset, slope);
+		if ((esr > esr_vf) && (esr <= esr_vl)) {
+			ocv =
+			bcmpmu_fg_get_esr_to_ocv_with_cap(fg, volt, curr, esr);
+			if ((ocv <= lut[idx].esr_vm_lvl))
+				goto exit;
+		}
+
+		slope = lut[idx].esr_vh_slope;
+		offset = lut[idx].esr_vh_offset;
+		esr = bcmpmu_fg_get_esr(volt, curr, offset, slope);
+		if ((esr > esr_vf) && (esr <= esr_vl)) {
+			ocv =
+			bcmpmu_fg_get_esr_to_ocv_with_cap(fg, volt, curr, esr);
+			if ((ocv <= lut[idx].esr_vh_lvl))
+				goto exit;
+		}
+
+		slope = lut[idx].esr_vf_slope;
+		offset = lut[idx].esr_vf_offset;
+		esr = bcmpmu_fg_get_esr(volt, curr, offset, slope);
+		if ((esr > esr_vf) && (esr <= esr_vl))
+			ocv =
+			bcmpmu_fg_get_esr_to_ocv_with_cap(fg, volt, curr, esr);
+		if ((ocv <= max_volt))
+			goto exit;
 	} else if (!bcmpmu_fg_is_cv_entered(fg)) {
 		curr = (fg->ibat_avg
 			== FAKE_IBAT_INTIAL_AVG) ? curr : fg->ibat_avg;
@@ -1741,6 +1792,8 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 	int usable_ocv_cap;
 	bool charging;
 
+	pr_fg(FLOW, "%s..\n", __func__);
+
 	charging = ((fg->flags.batt_status == POWER_SUPPLY_STATUS_CHARGING) ?
 			true : false);
 	if (charging) {
@@ -1767,6 +1820,10 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 		bcmpmu_fg_get_usable_cap_from_ocv_cap(fg->capacity_info.ocv_cap,
 			fg->capacity_info.uuc);
 	capacity_delta = abs(fg->capacity_info.percentage - usable_ocv_cap);
+
+#ifdef CONFIG_DEBUG_FS
+	fg->probes.soc_error = usable_ocv_cap - fg->capacity_info.percentage;
+#endif
 
 	pr_fg(FLOW, "%s : capacity_delta %d prev_cap_delta %d\n",
 			__func__, capacity_delta, fg->prev_cap_delta);
@@ -1858,9 +1915,6 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 			(capacity_delta > GUARD_BAND_LOW_THRLD)) {
 		fg->cal_high_clr_cnt = 0;
 		pr_fg(FLOW, "clear cal_high_clr_cnt\n");
-	} else if (fg->flags.high_bat_cal &&
-		fg->prev_cap_delta > capacity_delta) {
-		fg->flags.calibration = true;
 	}
 
 	pr_fg(FLOW, "%s : cal_high_bat_cnt %d cal_high_clr_cnt %d\n",
@@ -1868,10 +1922,6 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 
 	pr_fg(FLOW, "%s : cal_low_bat_cnt %d cal_low_clr_cnt %d\n",
 			__func__, fg->cal_low_bat_cnt, fg->cal_low_clr_cnt);
-
-#ifdef CONFIG_DEBUG_FS
-	fg->probes.soc_error = capacity_delta;
-#endif
 
 	fg->prev_cap_delta = capacity_delta;
 }
@@ -1893,6 +1943,8 @@ static void bcmpmu_fg_get_coulomb_counter(struct bcmpmu_fg_data *fg)
 	u8 accm[4];
 	u8 act_cnt[2];
 	u8 sleep_cnt[2];
+
+	pr_fg(FLOW, "%s..\n", __func__);
 
 	fg->capacity_info.ocv_cap = bcmpmu_fg_get_load_comp_capacity(fg, true);
 	fg->capacity_info.uuc = bcmpmu_fg_get_uuc(fg);
@@ -2861,7 +2913,15 @@ static void bcmpmu_fg_cal_low_batt_algo(struct bcmpmu_fg_data *fg)
 			fg->capacity_info.uuc);
 	cap_delta = ocv_cap - fg->capacity_info.percentage;
 
-	fg->low_cal_adj_fct = cap_delta * 100 / fg->capacity_info.percentage;
+	/* More agressive calibration due to unusable capacity */
+	if (fg->capacity_info.uuc < fg->capacity_info.percentage) {
+		fg->low_cal_adj_fct = cap_delta * 100 / (fg->capacity_info.percentage - fg->capacity_info.uuc);
+	} else {
+		/* This is quite unlikely but keep it to avoid divison
+		 * by zero or negative number which would flip the sign
+		 */
+		fg->low_cal_adj_fct = cap_delta * 100 / fg->capacity_info.percentage;
+	}
 	if ((fg->low_cal_adj_fct > 0) &&
 			(fg->low_cal_adj_fct > FG_MAX_ADJ_FACTOR))
 		fg->low_cal_adj_fct = FG_MAX_ADJ_FACTOR;
@@ -2952,7 +3012,15 @@ static void bcmpmu_fg_cal_high_batt_algo(struct bcmpmu_fg_data *fg)
 			fg->capacity_info.uuc);
 	cap_delta = ocv_cap - fg->capacity_info.percentage;
 
-	fg->high_cal_adj_fct = cap_delta * 100 / fg->capacity_info.percentage;
+	/* More agressive calibration due to unusable capacity */
+	if (fg->capacity_info.uuc < fg->capacity_info.percentage) {
+		fg->high_cal_adj_fct = cap_delta * 100 / (fg->capacity_info.percentage - fg->capacity_info.uuc);
+	} else {
+		/* This is quite unlikely but keep it to avoid divison
+		 * by zero or negative number which would flip the sign
+		 */
+		fg->high_cal_adj_fct = cap_delta * 100 / fg->capacity_info.percentage;
+	}
 	if ((fg->high_cal_adj_fct > 0) &&
 			(fg->high_cal_adj_fct > FG_MAX_ADJ_FACTOR))
 		fg->high_cal_adj_fct = FG_MAX_ADJ_FACTOR;
@@ -3130,10 +3198,19 @@ static void bcmpmu_fg_discharging_algo(struct bcmpmu_fg_data *fg)
 		if ((volt_avg <= cal_volt_low) ||
 				(cap_per <= cal_cap_low)) {
 				fg->discharge_state = DISCHARG_STATE_LOW_BATT;
+				/* fall through */
 		} else {
 			break;
 		}
 	case DISCHARG_STATE_LOW_BATT:
+		if ((volt_avg > cal_volt_low) &&
+				(cap_per > cal_cap_low)) {
+				/* Voltage glitch?
+				 * Return to high_batt_state
+				 */
+				fg->discharge_state = DISCHARG_STATE_HIGH_BATT;
+				break;
+		}
 		cap_cutoff = bcmpmu_fg_get_cutoff_capacity(fg, volt_avg);
 		if ((cap_cutoff >= 0) ||
 				(cap_per <= cutoff_lut[0].cap)) {
@@ -3157,8 +3234,6 @@ static void bcmpmu_fg_discharging_algo(struct bcmpmu_fg_data *fg)
 		}
 		break;
 	case DISCHARG_STATE_CRIT_BATT:
-		poll_time = fg->pdata->poll_rate_crit_batt;
-		config_tapper = true;
 		cap_cutoff = bcmpmu_fg_get_cutoff_capacity(fg, volt_avg);
 		pr_fg(FLOW, "cutoff_cap: %d cutoff_delta: %d cutoff_prev: %d\n",
 				fg->crit_cutoff_cap,
@@ -3167,6 +3242,20 @@ static void bcmpmu_fg_discharging_algo(struct bcmpmu_fg_data *fg)
 		pr_fg(FLOW, "cutoff_cap_cnt: %d, init_saved_cap: %d\n",
 				fg->cutoff_cap_cnt,
 				fg->flags.init_saved_cap);
+
+		if ((cap_cutoff < 0) &&
+				(cap_per > cutoff_lut[0].cap)) {
+			/* Voltage glitch?
+			 * Enable coulomb counter and return to low_batt_state
+			 */
+			bcmpmu_fg_enable_coulb_counter(fg, true);
+			fg->discharge_state = DISCHARG_STATE_LOW_BATT;
+			poll_time = fg->pdata->poll_rate_low_batt;
+			break;
+		}
+
+		poll_time = fg->pdata->poll_rate_crit_batt;
+		config_tapper = true;
 
 		if ((fg->crit_cutoff_delta > 0) &&
 				(cap_info->percentage > 0)) {
