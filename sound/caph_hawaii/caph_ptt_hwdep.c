@@ -350,7 +350,7 @@ static unsigned int hwdep_ptt_poll(struct snd_hwdep *hw, struct file *file,
  *
  * Return 0 for success
  */
-int __devinit HwdepPttDeviceNew(struct snd_card *card)
+int HwdepPttDeviceNew(struct snd_card *card)
 {
 	int err = 0;
 	struct snd_hwdep *pHwdep;

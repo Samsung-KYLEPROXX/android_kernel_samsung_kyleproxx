@@ -53,9 +53,9 @@ the GPL, without Broadcom's express prior written consent.
 #include <sound/initval.h>
 #include <linux/wakelock.h>
 #include <linux/completion.h>
+#include <linux/cdev.h>
 
 #endif /*__KERNEL__*/
-
 
 /*
  * Common section
@@ -70,12 +70,14 @@ enum voip_start_stop_type {
 #define	voip_start_stop_type_t	enum voip_start_stop_type
 
 enum voip_codec_type {
+	VoIP_Codec_None,
 	VoIP_Codec_PCM_8K,
 	VoIP_Codec_FR,
 	VoIP_Codec_AMR475,
 	VOIP_Codec_G711_U,
 	VoIP_Codec_PCM_16K,
-	VOIP_Codec_AMR_WB_7K
+	VOIP_Codec_AMR_WB_7K,
+	VoIP_Codec_Total
 };
 #define	voip_codec_type_t	enum voip_codec_type
 
@@ -91,6 +93,11 @@ struct treq_sysparm_t {
 	unsigned int data[TREQ_DATA_SIZE];
 };
 
+struct voip_codec_type_data {
+	voip_codec_type_t codec_type;
+	voip_start_stop_type_t ul_dl_type;
+};
+#define voip_codec_type_data_t struct voip_codec_type_data
 
 enum {
 	VoIP_Ioctl_GetVersion = _IOR('H', 0x10, int),
@@ -98,10 +105,10 @@ enum {
 	VoIP_Ioctl_Stop = _IOW('H', 0x12, voip_start_stop_type_t),
 	VoIP_Ioctl_SetSource = _IOW('H', 0x13, int),
 	VoIP_Ioctl_SetSink = _IOW('H', 0x14, int),
-	VoIP_Ioctl_SetCodecType = _IOW('H', 0x15, int),
+	VoIP_Ioctl_SetCodecType = _IOW('H', 0x15, voip_codec_type_data_t),
 	VoIP_Ioctl_GetSource = _IOR('H', 0x16, int),
 	VoIP_Ioctl_GetSink = _IOR('H', 0x17, int),
-	VoIP_Ioctl_GetCodecType = _IOR('H', 0x18, int),
+	VoIP_Ioctl_GetCodecType = _IOR('H', 0x18, voip_codec_type_data_t),
 	VoIP_Ioctl_SetMode = _IOW('H', 0x19, int),
 	VoIP_Ioctl_GetMode = _IOR('H', 0x1A, int),
 	VoIP_Ioctl_SetBitrate = _IOW('H', 0x1B, int),
@@ -113,7 +120,8 @@ enum {
 	DSPCtrl_Ioctl_SPSetVar = _IOW('H', 0x31, UserCtrl_data_t),
 	DSPCtrl_Ioctl_SPQuery = _IOR('H', 0x32, UserCtrl_data_t),
 	DSPCtrl_Ioctl_EQCtrl = _IOW('H', 0x33, UserCtrl_data_t),
-	Ctrl_Ioctl_SWEQParm = _IOR('H', 0x34, struct treq_sysparm_t)
+	Ctrl_Ioctl_SWEQParm = _IOR('H', 0x34, struct treq_sysparm_t),
+	Ctrl_Ioctl_FDMBCParm = _IOR('H', 0x35, UserCtrl_data_t)
 };
 
 /*
@@ -160,7 +168,7 @@ extern int gAudioDebugLevel;
 					(int)AUDIO_SINK_TOTAL_COUNT) ? \
 					MIC_TOTAL_COUNT_FOR_USER : \
 					AUDIO_SINK_TOTAL_COUNT)
-#define	CAPH_MAX_PCM_STREAMS		8
+#define	CAPH_MAX_PCM_STREAMS		9
 
 /* Output volume */
 #define	MIN_VOLUME_mB			-5000
@@ -172,7 +180,8 @@ extern int gAudioDebugLevel;
 #define	MIN_GAIN_mB				0
 #define	MAX_GAIN_mB				4450
 
-
+/* /////////////change ?????????????????????????????? */
+#define CAPTURE
 
 struct _TCtrl_Line {
 	s8 strName[CAPH_MIXER_NAME_LENGTH];
@@ -210,6 +219,7 @@ enum	CTL_STREAM_PANEL_t {
 	CTL_STREAM_PANEL_VOIPOUT,
 	CTL_STREAM_PANEL_PCMIN,
 	CTL_STREAM_PANEL_SPEECHIN,
+	CTL_STREAM_PANEL_PCM_IN,
 	CTL_STREAM_PANEL_VOIPIN,
 	CTL_STREAM_PANEL_VOICECALL,
 	CTL_STREAM_PANEL_FM,
@@ -217,6 +227,11 @@ enum	CTL_STREAM_PANEL_t {
 	CTL_STREAM_PANEL_LAST
 };
 
+struct brcm_pcm_device {
+	struct snd_pcm *pcm;
+	unsigned int stream_number;
+	struct brcm_alsa_chip *chip;
+};
 
 struct brcm_alsa_chip {
 	struct snd_card *card;
@@ -259,15 +274,30 @@ struct brcm_alsa_chip {
 	 */
 	s32	i32CfgSSP[3];
 	s32	i32CurApp;
+	s32 i32CurMode;
 	s32	i32CurAmpState;
 	s32	iCallMode;
 	voip_data_t	voip_data;
+	struct brcm_pcm_device device_playback[2];
+#ifdef CAPTURE
+	struct brcm_pcm_device device_capture[2];
+#endif
 };
 
+struct voipdev_t {
+	int number;
+	struct snd_card *card;
+	struct cdev voipcdev;
+	struct __bcm_caph_hwdep_voip *pvoip;
+};
+
+
 #define	brcm_alsa_chip_t struct brcm_alsa_chip
+#define	brcm_pcm_device_t struct brcm_pcm_device
+#define	voipdev struct voipdev_t
+
 void caphassert(const char *fcn, int line, const char *expr);
 #define CAPH_ASSERT(e)   ((e) ? (void) 0 : caphassert(__func__, __LINE__, #e))
-
 
 enum	CTL_FUNCTION_t {
 	CTL_FUNCTION_VOL = 1,
@@ -284,12 +314,15 @@ enum	CTL_FUNCTION_t {
 	CTL_FUNCTION_BT_TEST,
 	CTL_FUNCTION_CFG_SSP,
 	CTL_FUNCTION_CFG_IHF,
-	CTL_FUNCTION_SINK_CHG,
+	CTL_FUNCTION_SINK_CHG_ADD,
+	CTL_FUNCTION_SINK_CHG_REM,
 	CTL_FUNCTION_HW_CTL,
 	CTL_FUNCTION_APP_SEL,
+	CTL_FUNCTION_MODE_SEL,
 	CTL_FUNCTION_APP_RMV,
 	CTL_FUNCTION_AMP_CTL,
-	CTL_FUNCTION_CALL_MODE
+	CTL_FUNCTION_CALL_MODE,
+	CTL_FUNCTION_COMMIT_AUD_PROFILE
 };
 
 enum	AT_AUD_Ctl_t {
@@ -316,11 +349,12 @@ enum	AT_AUD_Handler_t {
 
 
 
+extern int voipdevicecreate(voipdev *voipchrdevpvtdata);
 /* functions */
-extern int __devinit PcmDeviceNew(struct snd_card *card);
-extern int __devinit ControlDeviceNew(struct snd_card *card);
-int __devinit HwdepDeviceNew(struct snd_card *card);
-int __devinit HwdepPttDeviceNew(struct snd_card *card);
+extern int PcmDeviceNew(struct snd_card *card);
+extern int ControlDeviceNew(struct snd_card *card);
+int HwdepDeviceNew(struct snd_card *card);
+int HwdepPttDeviceNew(struct snd_card *card);
 
 extern int  AtAudCtlHandler_put(Int32 cmdIndex, brcm_alsa_chip_t *pChip,
 	Int32  ParamCount, Int32 *Params); /* at_aud_ctl.c */

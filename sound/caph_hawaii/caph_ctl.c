@@ -376,6 +376,16 @@ static int SelCtrlInfo(struct snd_kcontrol *kcontrol,
 
 	CAPH_ASSERT(stream >= CTL_STREAM_PANEL_FIRST
 		    && stream < CTL_STREAM_PANEL_LAST);
+
+#if 1
+	if (stream == CTL_STREAM_PANEL_VOICECALL)
+		uinfo->count = 2;
+	else
+		uinfo->count = 1;
+#else
+	uinfo->count = 2;
+#endif
+
 	stream--;
 	/*
 	 * coverity[OVERRUN_STATIC] - false alarm. stream is getting
@@ -390,7 +400,6 @@ static int SelCtrlInfo(struct snd_kcontrol *kcontrol,
 	}
 	uinfo->value.integer.step = 1;
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-	uinfo->count = 2;
 
 	return 0;
 }
@@ -425,10 +434,10 @@ static int SelCtrlGet(struct snd_kcontrol *kcontrol,
 	 * May need to get the value from driver
 	 */
 	ucontrol->value.integer.value[0] = pSel[0];
-	ucontrol->value.integer.value[1] = pSel[1];
+	/* ucontrol->value.integer.value[1] = pSel[1]; */
 	aTrace(LOG_ALSA_INTERFACE, "\nALSA-CAPH %s,"
-	       "  stream=%d, pSel %d:%d, numid=%d index=%d\n",
-	       __func__, stream, pSel[0], pSel[1],
+	       "  stream=%d, pSel %d, numid=%d index=%d\n",
+	       __func__, stream, pSel[0],
 	       ucontrol->id.numid, ucontrol->id.index);
 	return 0;
 }
@@ -447,8 +456,10 @@ static int SelCtrlPut(struct snd_kcontrol *kcontrol,
 {
 	brcm_alsa_chip_t *pChip =
 	    (brcm_alsa_chip_t *) snd_kcontrol_chip(kcontrol);
+#if 1
 	int priv = kcontrol->private_value;
 	int stream = STREAM_OF_CTL(priv);
+#endif
 	s32 *pSel, pCurSel[MAX_PLAYBACK_DEV];
 #if defined(CONFIG_MAP_VOIP)
 	long uctrl_action = 0, uctrl_param = 0;
@@ -476,6 +487,9 @@ static int SelCtrlPut(struct snd_kcontrol *kcontrol,
 
 	pSel[0] = ucontrol->value.integer.value[0];
 	pSel[1] = ucontrol->value.integer.value[1];
+	if (stream != CTL_STREAM_PANEL_VOICECALL)
+		pSel[1] = pSel[0];
+
 #if defined(CONFIG_MAP_VOIP)
 	/* for voip out/in stream, value[0] used for control,
 	   such as sel/add/desel/remove actions */
@@ -514,8 +528,10 @@ static int SelCtrlPut(struct snd_kcontrol *kcontrol,
 			pStream =
 			    (struct snd_pcm_substream *)pChip->
 			    streamCtl[stream - 1].pSubStream;
-		else
+		else {
+			/*aError("m:breaking out\n");*/
 			break;	/* stream is not running, return */
+		}
 
 		if (pStream->runtime == NULL) {
 			aError("Stream's runtime is NULL and hence returning");
@@ -557,22 +573,22 @@ static int SelCtrlPut(struct snd_kcontrol *kcontrol,
 				       sizeof(tmp_kcontrol));
 				tmp_kcontrol.private_value =
 				    CAPH_CTL_PRIVATE(stream, 0,
-						     CTL_FUNCTION_SINK_CHG);
+						     CTL_FUNCTION_SINK_CHG_REM);
 
 				memcpy(&tmp_ucontrol, ucontrol,
 				       sizeof(tmp_ucontrol));
 				/*1 to remove a sink */
-				tmp_ucontrol.value.integer.value[0] = 1;
+				/* tmp_ucontrol.value.integer.value[0] = 1; */
 
 				if (pCurSel[0] != new_sel[0]) {
-					tmp_ucontrol.value.integer.value[1] =
+					tmp_ucontrol.value.integer.value[0] =
 					    pCurSel[0];
 					MiscCtrlPut(&tmp_kcontrol,
 						    &tmp_ucontrol);
 				}
 
 				if (pCurSel[1] != new_sel[0]) {
-					tmp_ucontrol.value.integer.value[1] =
+					tmp_ucontrol.value.integer.value[0] =
 					    pCurSel[1];
 					MiscCtrlPut(&tmp_kcontrol,
 						    &tmp_ucontrol);
@@ -699,8 +715,16 @@ static int SelCtrlPut(struct snd_kcontrol *kcontrol,
 		parm_call.cur_spkr = pCurSel[1];
 		parm_call.new_mic = pSel[0];
 		parm_call.new_spkr = pSel[1];
-		AUDIO_Ctrl_Trigger(ACTION_AUD_SetTelephonyMicSpkr, &parm_call,
-				   NULL, 0);
+
+		/* CHECK IF REQUIRED TINYALSATOCHECK */
+		if (parm_call.new_spkr != parm_call.cur_spkr) {
+			/*aTrace(LOG_ALSA_INTERFACE,
+				"parm_call.new_mic = %d"
+				"parm_call.new_spkr = %d\n",
+				parm_call.new_mic, parm_call.new_spkr);*/
+			AUDIO_Ctrl_Trigger(ACTION_AUD_SetTelephonyMicSpkr,
+				&parm_call, NULL, 0);
+		}
 		break;
 
 	case CTL_STREAM_PANEL_FM:	/* FM */
@@ -796,10 +820,10 @@ static int SwitchCtrlGet(struct snd_kcontrol *kcontrol,
 	pMute = pChip->streamCtl[stream].ctlLine[dev].iMute;
 
 	ucontrol->value.integer.value[0] = pMute[0];
-	ucontrol->value.integer.value[1] = pMute[1];
+/*	ucontrol->value.integer.value[1] = pMute[1]; */
 	aTrace(LOG_ALSA_INTERFACE, "\nALSA-CAPH %s"
-	       " stream=%d, pMute %d:%d\n",
-	       __func__, stream, pMute[0], pMute[1]);
+	       " stream=%d, pMute %d\n",
+	       __func__, stream, pMute[0]);
 	return 0;
 }
 
@@ -836,11 +860,10 @@ static int SwitchCtrlPut(struct snd_kcontrol *kcontrol,
 	pMute = pChip->streamCtl[stream - 1].ctlLine[dev].iMute;
 
 	pMute[0] = ucontrol->value.integer.value[0];
-	pMute[1] = ucontrol->value.integer.value[1];
-
+	/* pMute[1] = ucontrol->value.integer.value[1]; */
 	aTrace(LOG_ALSA_INTERFACE, "ALSA-CAPH %s"
-	       " stream=%d, pMute %d:%d\n",
-	       __func__, stream - 1, pMute[0], pMute[1]);
+	       " stream=%d, pMute %d\n",
+	       __func__, stream - 1, pMute[0]);
 
 	/*
 	 * Apply mute is the stream is running
@@ -957,7 +980,7 @@ static int MiscCtrlInfo(struct snd_kcontrol *kcontrol,
 		break;
 	case CTL_FUNCTION_PHONE_CALL_MIC_MUTE:
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
-		uinfo->count = 2;
+		uinfo->count = 1;
 		uinfo->value.integer.min = 0;
 		uinfo->value.integer.max = 1;
 		break;
@@ -987,22 +1010,24 @@ static int MiscCtrlInfo(struct snd_kcontrol *kcontrol,
 		break;
 	case CTL_FUNCTION_AT_AUDIO:
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+/*#ifndef CAPH_TINYALSA
 		uinfo->count = 7;
+#else*/
+		uinfo->count = 8;
+/*#endif*/
 		uinfo->value.integer.min = 0x80000000;
 		uinfo->value.integer.max = 0x7FFFFFFF;
 		/*
 		 * val[0] is at command handler,
 		 * val[1] is 1st parameter of the AT command parameters
 		 */
+/*#ifndef CAPH_TINYALSA
 		if (kcontrol->id.index == 1) {
 			uinfo->count = 1;
 			uinfo->value.integer.min = 0x0;
-			/*
-			 * Each bit indicates Log ID.
-			 * Max of 32 Log IDs can be supported
-			 */
 			uinfo->value.integer.max = 0x7FFFFFFF;
 		}
+#endif*/
 		break;
 	case CTL_FUNCTION_BYPASS_VIBRA:
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
@@ -1029,7 +1054,7 @@ static int MiscCtrlInfo(struct snd_kcontrol *kcontrol,
 		break;
 	case CTL_FUNCTION_CFG_SSP:
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-		uinfo->count = 1;
+		uinfo->count = 2;
 		uinfo->value.integer.min = 0;
 		uinfo->value.integer.max = 3;
 		break;
@@ -1040,26 +1065,34 @@ static int MiscCtrlInfo(struct snd_kcontrol *kcontrol,
 			uinfo->value.integer.min = 0;
 			uinfo->value.integer.max = 5;	/* volume level */
 		} else if (stream == CTL_STREAM_PANEL_FM) {
-			uinfo->count = 2;
+			/* uinfo->count = 2; */
+			uinfo->count = 1;
 			uinfo->value.integer.min = 0;
 			uinfo->value.integer.max = 14;	/* volume level */
 		}
 		break;
-	case CTL_FUNCTION_SINK_CHG:
+	case CTL_FUNCTION_SINK_CHG_ADD:
+	case CTL_FUNCTION_SINK_CHG_REM:
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-		uinfo->count = 2;
+		uinfo->count = 1;
 		uinfo->value.integer.min = 0;
 		uinfo->value.integer.max = AUDIO_SINK_TOTAL_COUNT;
 		break;
 	case CTL_FUNCTION_HW_CTL:
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-		uinfo->count = 4;
+		uinfo->count = 5;
 		uinfo->value.integer.min = 0x80000000;
 		/*
 		 * get the correct range, keep it to MAX for now as it
 		 * supports register address
 		 */
 		uinfo->value.integer.max = 0x7FFFFFFF;
+		break;
+	case CTL_FUNCTION_MODE_SEL:
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+		uinfo->count = 1;
+		uinfo->value.integer.min = 0;
+		uinfo->value.integer.max = 8;
 		break;
 	case CTL_FUNCTION_APP_SEL:
 	case CTL_FUNCTION_APP_RMV:
@@ -1080,6 +1113,11 @@ static int MiscCtrlInfo(struct snd_kcontrol *kcontrol,
 		uinfo->count = 1;
 		uinfo->value.integer.min = 0;
 		uinfo->value.integer.max = 2;
+		break;
+	case CTL_FUNCTION_COMMIT_AUD_PROFILE:
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+		uinfo->count = 1;
+		uinfo->value.integer.min = 0;
 		break;
 	default:
 		aWarn("%s, Unexpected function code %d\n",
@@ -1107,9 +1145,13 @@ static int MiscCtrlGet(struct snd_kcontrol *kcontrol,
 	int priv = kcontrol->private_value;
 	int function = FUNC_OF_CTL(priv);
 	int stream = STREAM_OF_CTL(priv);
-	int rtn = 0, chn = 0;
+	int rtn = 0;
+//	int chn = 0;	// Not used
+	int index;
 	struct snd_ctl_elem_info info;
 	BRCM_AUDIO_Param_AtCtl_t parm_atctl;
+	int ssp_index;
+	int hwctl_index;
 
 	switch (function) {
 	case CTL_FUNCTION_LOOPBACK_TEST:
@@ -1127,7 +1169,7 @@ static int MiscCtrlGet(struct snd_kcontrol *kcontrol,
 		break;
 	case CTL_FUNCTION_PHONE_CALL_MIC_MUTE:
 		ucontrol->value.integer.value[0] = pChip->iMutePhoneCall[0];
-		ucontrol->value.integer.value[1] = pChip->iMutePhoneCall[1];
+		/* ucontrol->value.integer.value[1] = pChip->iMutePhoneCall[1]; */
 		break;
 	case CTL_FUNCTION_PHONE_ECNS_ENABLE:
 		ucontrol->value.integer.value[0] = pChip->iEnableECNSPhoneCall;
@@ -1147,7 +1189,9 @@ static int MiscCtrlGet(struct snd_kcontrol *kcontrol,
 		    AtAudCtlHandler_get(kcontrol->id.index, pChip, info.count,
 					ucontrol->value.integer.value);*/
 		memset(&parm_atctl, 0, sizeof(parm_atctl));
-		parm_atctl.cmdIndex = kcontrol->id.index;
+		index = ucontrol->value.integer.value[info.count-1];
+		parm_atctl.cmdIndex = index;
+		/*parm_atctl.cmdIndex = kcontrol->id.index;*/
 		parm_atctl.pChip = pChip;
 		parm_atctl.ParamCount = info.count;
 		parm_atctl.isGet = 1;
@@ -1179,33 +1223,46 @@ static int MiscCtrlGet(struct snd_kcontrol *kcontrol,
 		ucontrol->value.integer.value[1] = pChip->pi32CfgIHF[1];
 		break;
 	case CTL_FUNCTION_CFG_SSP:
+		/* TINYALSATOCHECK */
+		ssp_index = ucontrol->value.integer.value[1];
 		ucontrol->value.integer.value[0] =
-		    pChip->i32CfgSSP[kcontrol->id.index];
+		    pChip->i32CfgSSP[ssp_index];
 		break;
 	case CTL_FUNCTION_VOL:
 		/*
 		 * Need to copy the volume for the particular stream only
 		 */
-		if (stream == CTL_STREAM_PANEL_VOICECALL)
-			chn = 1;
-		else
-			chn = 2;
+		/*if (stream == CTL_STREAM_PANEL_VOICECALL)
+		//	chn = 1;
+		//else
+		//	chn = 2;
+		*/
 		memcpy(ucontrol->value.integer.value,
-		       pChip->pi32LevelVolume[stream - 1], chn * sizeof(s32));
+		       pChip->pi32LevelVolume[stream - 1], sizeof(s32));
 		break;
-	case CTL_FUNCTION_SINK_CHG:
+	case CTL_FUNCTION_SINK_CHG_ADD:
+	case CTL_FUNCTION_SINK_CHG_REM:
 		ucontrol->value.integer.value[0] = 0;
-		ucontrol->value.integer.value[1] = 0;
+/*		ucontrol->value.integer.value[1] = 0; */
 		break;
 	case CTL_FUNCTION_HW_CTL:
-		AUDCTRL_GetHardwareControl(kcontrol->id.index,
+		/* TINYALSATOCHECK */
+		hwctl_index = (int)ucontrol->value.integer.
+					   value[4];
+		AUDCTRL_GetHardwareControl(hwctl_index,
 					   (void *)ucontrol->value.integer.
 					   value);
 		break;
 	case CTL_FUNCTION_APP_SEL:
 		ucontrol->value.integer.value[0] = pChip->i32CurApp;
 		break;
+	case CTL_FUNCTION_MODE_SEL:
+		ucontrol->value.integer.value[0] = pChip->i32CurMode;
+		break;
 	case CTL_FUNCTION_APP_RMV:
+		/* don't need to do anything */
+		break;
+	case CTL_FUNCTION_COMMIT_AUD_PROFILE:
 		/* don't need to do anything */
 		break;
 	case CTL_FUNCTION_AMP_CTL:
@@ -1251,9 +1308,12 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 	int function = priv & 0xFF;
 	int *pSel, callMode;
 	int stream = STREAM_OF_CTL(priv);
+//	static int vibra_count;
 	BRCM_AUDIO_Control_Params_un_t ctl_parm;
+//	BRCM_AUDIO_Param_Vibra_t vibra;
 
-	int rtn = 0, cmd, i, indexVal = -1, cnt = 0;
+	int rtn = 0, i, indexVal = -1, cnt = 0;
+//	int cmd;	// Not used
 	BRCM_AUDIO_Param_AtCtl_t parm_atctl;
 	struct snd_pcm_substream *pStream = NULL;
 	int sink = 0;
@@ -1261,13 +1321,15 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 
 	pSel = pChip->streamCtl[stream - 1].iLineSelect;
 	aTrace(LOG_ALSA_INTERFACE, "ALSA-CAPH %s"
-	       " stream=%d, function %d, index %d, value %ld %ld %ld %ld\n",
+	       " stream=%d, function %d, index %d, value %ld %ld %ld %ld"
+	       " and ucontrol->id.index = %d\n",
 	       __func__, stream - 1, function,
 	       kcontrol->id.index,
 	       ucontrol->value.integer.value[0],
 	       ucontrol->value.integer.value[1],
 	       ucontrol->value.integer.value[2],
-	       ucontrol->value.integer.value[3]);
+	       ucontrol->value.integer.value[3],
+	       ucontrol->id.index);
 
 	switch (function) {
 	case CTL_FUNCTION_LOOPBACK_TEST:
@@ -1294,6 +1356,7 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 		11 - VoIP ON */
 		pChip->iEnablePhoneCall =
 			ucontrol->value.integer.value[0];
+
 		/* Right now, we don't need to differentiate
 		VoIP OFF/Voice call OFF.To keep the logic
 		simple, set the same value as Voice call
@@ -1350,8 +1413,9 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 		}
 		break;
 	case CTL_FUNCTION_PHONE_CALL_MIC_MUTE:
-		if (pChip->iMutePhoneCall[0] !=
-		    ucontrol->value.integer.value[0]) {
+		/*if (pChip->iMutePhoneCall[0] !=
+		    ucontrol->value.integer.value[0]) */
+		{
 			pChip->iMutePhoneCall[0] =
 			    ucontrol->value.integer.value[0];
 
@@ -1477,7 +1541,12 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 		    AtAudCtlHandler_put(kcontrol->id.index, pChip, info.count,
 					ucontrol->value.integer.value);*/
 		memset(&parm_atctl, 0, sizeof(parm_atctl));
-		parm_atctl.cmdIndex = kcontrol->id.index;
+		parm_atctl.cmdIndex =
+			ucontrol->value.integer.value[info.count-1];
+		/*aError("MiscCtrlPut CTL_FUNCTION_AT_AUDIO"
+		       "parm_atctl.cmdIndex = %d\n",
+		       (int)parm_atctl.cmdIndex);*/
+		/*parm_atctl.cmdIndex = kcontrol->id.index;*/
 		/*this pointer would not released, so no need to pass the
 		  whole structure*/
 		parm_atctl.pChip = pChip;
@@ -1488,31 +1557,42 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 		AUDIO_Ctrl_Trigger(ACTION_AUD_AtCtl, &parm_atctl, NULL, 1);
 		break;
 	case CTL_FUNCTION_BYPASS_VIBRA:
-		pChip->pi32BypassVibraParam[0] =
-		    ucontrol->value.integer.value[0];
-		ctl_parm.parm_vibra.strength =
-		    pChip->pi32BypassVibraParam[1] =
-		    ucontrol->value.integer.value[1];
-		ctl_parm.parm_vibra.direction =
-		    pChip->pi32BypassVibraParam[2] =
-		    ucontrol->value.integer.value[2];
-		ctl_parm.parm_vibra.duration =
-		    pChip->pi32BypassVibraParam[3] =
-		    ucontrol->value.integer.value[3];
-#if 0
+		{
+		int index = ucontrol->id.index;
+
+			aTrace(LOG_ALSA_INTERFACE, "MiscCtrlPut BypassVibra enable %d, "
+		       "strength %d, direction %d, duration %d.\n",
+		       ucontrol->value.integer.value[0],
+		       ucontrol->value.integer.value[1],
+		       ucontrol->value.integer.value[2],
+			       ucontrol->value.integer.value[3]);
+
+		if (index == 0) {
+			pChip->pi32BypassVibraParam[0] =
+				ucontrol->value.integer.value[0];
+		} else if (index == 1) {
+			ctl_parm.parm_vibra.strength =
+			    pChip->pi32BypassVibraParam[1] =
+			    ucontrol->value.integer.value[1];
+		} else if (index == 2) {
+			ctl_parm.parm_vibra.direction =
+			    pChip->pi32BypassVibraParam[2] =
+				ucontrol->value.integer.value[2];
+
+		} else if (index == 3) {
+			ctl_parm.parm_vibra.duration =
+			    pChip->pi32BypassVibraParam[3] =
+			    ucontrol->value.integer.value[3];
+
 		if (pChip->pi32BypassVibraParam[0] == 1) {	/* Enable */
 			AUDIO_Ctrl_Trigger(ACTION_AUD_EnableByPassVibra,
 					   &ctl_parm.parm_vibra, NULL, 0);
-		} else
+				} else {
 			AUDIO_Ctrl_Trigger(ACTION_AUD_DisableByPassVibra, NULL,
 					   NULL, 0);
-#endif		
-		aTrace(LOG_ALSA_INTERFACE, "MiscCtrlPut BypassVibra enable %d, "
-		       "strength %d, direction %d, duration %d.\n",
-		       pChip->pi32BypassVibraParam[0],
-		       pChip->pi32BypassVibraParam[1],
-		       pChip->pi32BypassVibraParam[2],
-		       pChip->pi32BypassVibraParam[3]);
+		}
+			}
+			}
 		break;
 	case CTL_FUNCTION_BT_TEST:
 		ctl_parm.parm_bt_test.mode =
@@ -1531,11 +1611,13 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 				&ctl_parm.parm_cfg_ihf,
 				NULL, 0);
 		} else if (ucontrol->value.integer.value[0] == 2) {
+#ifdef CONFIG_CAPH_STEREO_IHF
 			ctl_parm.parm_cfg_ihf.stIHF = TRUE;	/* stereo IHF */
 			isSTIHF = TRUE;	/* stereo IHF */
 			AUDIO_Ctrl_Trigger(ACTION_AUD_CfgIHF,
 				&ctl_parm.parm_cfg_ihf,
 				NULL, 0);
+#endif
 		} else {
 			aWarn("%s, Invalid value for"
 			      "setting IHF mode: %ld, 1-mono, 2-stereo.",
@@ -1552,9 +1634,13 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 				&ctl_parm.parm_cfg_ssp,
 				NULL, 0);
 		} else {
-			ctl_parm.parm_cfg_ssp.mode = kcontrol->id.index + 1;
+			int index = (int)ucontrol->value.integer.value[1];
+			aTrace(LOG_ALSA_INTERFACE,
+				"MiscCtrlPut CTL_FUNCTION_CFG_SSP "
+				"index = %d\n", index);
+			ctl_parm.parm_cfg_ssp.mode = index + 1;
 			ctl_parm.parm_cfg_ssp.bus =
-			pChip->i32CfgSSP[kcontrol->id.index] =
+			pChip->i32CfgSSP[index] =
 			    ucontrol->value.integer.value[0];
 			ctl_parm.parm_cfg_ssp.en_lpbk = 0;
 			/*
@@ -1579,28 +1665,29 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 				break; /* Do not set hw if not in call */
 			ctl_parm.parm_vol.source = pSel[0];
 			ctl_parm.parm_vol.sink = pSel[1];
+			// ctl_parm.parm_vol.sink = pSel[0];
 			ctl_parm.parm_vol.volume1 =
-			    pChip->pi32LevelVolume[CTL_STREAM_PANEL_VOICECALL -
-						   1][0];
+			    pChip->pi32LevelVolume[CTL_STREAM_PANEL_VOICECALL - 1][0];
 			ctl_parm.parm_vol.gain_format =
 			    AUDIO_GAIN_FORMAT_DSP_VOICE_VOL_GAIN;
 			AUDIO_Ctrl_Trigger(ACTION_AUD_SetTelephonySpkrVolume,
 					   &ctl_parm.parm_vol, NULL, 0);
 		} else if (stream == CTL_STREAM_PANEL_FM) {
 			memcpy(pChip->pi32LevelVolume[stream - 1],
-			       ucontrol->value.integer.value, 2 * sizeof(s32));
+		       /* ucontrol->value.integer.value, 2 * sizeof(s32)); */
+			       ucontrol->value.integer.value, sizeof(s32));
 			/*
 			 * source and sink are set in function SelCtrlPut()
 			 */
 			ctl_parm.parm_vol.source = pChip->streamCtl[stream - 1]
 			    .dev_prop.p[0].source;	/* AUDIO_SOURCE_I2S */
 			ctl_parm.parm_vol.sink = pSel[0];
-			/* left vol */
-			ctl_parm.parm_vol.volume1 =
+			/* left  and right vol */
+			ctl_parm.parm_vol.volume2 = ctl_parm.parm_vol.volume1 =
 			    pChip->pi32LevelVolume[CTL_STREAM_PANEL_FM - 1][0];
 			/* right vol */
-			ctl_parm.parm_vol.volume2 =
-			    pChip->pi32LevelVolume[CTL_STREAM_PANEL_FM - 1][1];
+			/*ctl_parm.parm_vol.volume2 =
+		    pChip->pi32LevelVolume[CTL_STREAM_PANEL_FM - 1][1]; */
 			ctl_parm.parm_vol.gain_format =
 			    AUDIO_GAIN_FORMAT_FM_RADIO_DIGITAL_VOLUME_TABLE;
 			AUDIO_Ctrl_Trigger(ACTION_AUD_SetPlaybackVolume,
@@ -1609,23 +1696,21 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 
 		break;
 
-	case CTL_FUNCTION_SINK_CHG:
+	case CTL_FUNCTION_SINK_CHG_ADD:
 		aTrace
 		    (LOG_ALSA_INTERFACE,
-		     "Change sink stream=%d"
-		     "cmd=%ld sink=%ld\n", stream - 1,
-		     ucontrol->value.integer.value[0],
-		     ucontrol->value.integer.value[1]);
-		cmd = ucontrol->value.integer.value[0];
+		     "Change sink (add) stream=%d"
+		     "sink=%ld\n", stream - 1,
+		     ucontrol->value.integer.value[0]);
+		     /* ucontrol->value.integer.value[1]); */
+		/* cmd = ucontrol->value.integer.value[0]; */
 		pSel = pChip->streamCtl[stream - 1].iLineSelect;
-		if (cmd == 0) {	/*add device */
+		/* if (cmd == 0) {	*/ /*add device */
 			for (i = 0; i < MAX_PLAYBACK_DEV; i++) {
-				if (pSel[i] == AUDIO_SINK_UNDEFINED
-				    && indexVal == -1) {
+				if (pSel[i] == AUDIO_SINK_UNDEFINED && indexVal == -1) {
 					indexVal = i;
 					continue;
-				} else if (pSel[i] ==
-					   ucontrol->value.integer.value[1]) {
+				} else if (pSel[i] == ucontrol->value.integer.value[0]) {
 					indexVal = -1;
 					aTrace(LOG_ALSA_INTERFACE,
 					       "Device already added "
@@ -1640,17 +1725,18 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 				}
 			}
 			if (indexVal != -1) {
-				pSel[indexVal] = ucontrol->value.integer.value[1];
-
+				pSel[indexVal] = ucontrol->value.integer.value[0];
 				if (pChip->streamCtl[stream - 1].pSubStream != NULL) {
 					pStream = (struct snd_pcm_substream *)pChip->streamCtl[stream - 1].pSubStream;
 					/*
 					 * if the stream is running, then call
-					 * the audio driver API to add the device
+					 * the audio driver API to add
+					 * the device
 					 */
 					if (pStream->runtime->status->state == SNDRV_PCM_STATE_RUNNING
 					    || pStream->runtime->status->state == SNDRV_PCM_STATE_PAUSED) {
-						if (pSel[indexVal] >= AUDIO_SINK_HANDSET && pSel[indexVal] < AUDIO_SINK_VALID_TOTAL) {
+						if (pSel[indexVal] >= AUDIO_SINK_HANDSET
+						    && pSel[indexVal] < AUDIO_SINK_VALID_TOTAL) {
 							ctl_parm.parm_spkr.src = AUDIO_SOURCE_MEM;
 							ctl_parm.parm_spkr.sink = pSel[indexVal];
 							ctl_parm.parm_spkr.stream = (stream - 1);
@@ -1659,10 +1745,19 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 					}
 				}
 			}
-		} else if (cmd == 1) {	/*  remove device */
+			break;
+	case CTL_FUNCTION_SINK_CHG_REM:
+		aTrace
+		    (LOG_ALSA_INTERFACE,
+		     "Change sink (remove) stream=%d"
+		     "sink=%ld\n", stream - 1,
+		     ucontrol->value.integer.value[0]);
+		     /* ucontrol->value.integer.value[1]); */
+		/* cmd = ucontrol->value.integer.value[0]; */
+		pSel = pChip->streamCtl[stream - 1].iLineSelect;
+		/* else if (cmd == 1) { */	/*  remove device */
 			for (i = 0; i < MAX_PLAYBACK_DEV; i++) {
-				if (pSel[i] == ucontrol->value.integer.value[1]
-				    && indexVal == -1) {
+				if (pSel[i] == ucontrol->value.integer.value[0] && indexVal == -1) {
 					/* sink to remove */
 					indexVal = i;
 					sink = pSel[indexVal];
@@ -1682,7 +1777,8 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 					pStream = (struct snd_pcm_substream *)pChip->streamCtl[stream - 1].pSubStream;
 					/*
 					 * if the stream is running, then call
-					 * the audio driver API to remove the device
+					 * the audio driver API to remove
+					 * the device
 					 */
 					if (pStream->runtime->status->state == SNDRV_PCM_STATE_RUNNING
 					    || pStream->runtime->status->state == SNDRV_PCM_STATE_PAUSED) {
@@ -1694,10 +1790,17 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 				}
 				pSel[indexVal] = AUDIO_SINK_UNDEFINED;
 			}
-		}
+
 		break;
 	case CTL_FUNCTION_HW_CTL:
-		ctl_parm.parm_hwCtl.access_type = kcontrol->id.index;
+		/* ADDED FOR TINYALSA */
+		ctl_parm.parm_hwCtl.access_type	 =
+				(int)ucontrol->value.integer.value[4];
+		aTrace(LOG_ALSA_INTERFACE,
+			"ucontrol->value.integer.value[4] = %d ,"
+			"kcontrol->id.index =%d",
+			(int)ucontrol->value.integer.value[4],
+			(int)kcontrol->id.index);
 		ctl_parm.parm_hwCtl.arg1 =
 			(int)ucontrol->value.integer.value[0];
 		ctl_parm.parm_hwCtl.arg2 =
@@ -1725,6 +1828,22 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 			&ctl_parm.parm_setapp,
 			NULL, 0);
 		break;
+
+	case CTL_FUNCTION_MODE_SEL:
+		aTrace(LOG_ALSA_INTERFACE,
+		       "CTL_FUNCTION_MODE_SEL newMode=%d",
+		       (int)ucontrol->value.integer.value[0]);
+
+		pChip->i32CurMode =
+			ucontrol->value.integer.value[0];
+
+		ctl_parm.parm_setmode.aud_mode =
+			(int)ucontrol->value.integer.value[0];
+		/*set audio mode from values from user space*/
+		AUDIO_Ctrl_Trigger(ACTION_AUD_SetAudioMode,
+			&ctl_parm.parm_setmode, NULL, 0);
+		break;
+
 	case CTL_FUNCTION_APP_RMV:
 		aTrace(LOG_ALSA_INTERFACE,
 		       "CTL_FUNCTION_APP_RMV rmApp=%d",
@@ -1735,8 +1854,16 @@ static int MiscCtrlPut(struct snd_kcontrol *kcontrol,
 			(int)ucontrol->value.integer.value[0];
 		/*remove app after user application is gone*/
 		AUDIO_Ctrl_Trigger(ACTION_AUD_RemoveAudioApp,
-			&ctl_parm.parm_rmapp,
-			NULL, 0);
+			&ctl_parm.parm_rmapp, NULL, 0);
+		break;
+	case CTL_FUNCTION_COMMIT_AUD_PROFILE:
+		aTrace(LOG_ALSA_INTERFACE,
+				"CTL_FUNCTION_COMMIT_AUD_PROFILE ");
+
+		/*Set the audio profile based on the existing
+			app profile and the audio mode*/
+		AUDIO_Ctrl_Trigger(ACTION_AUD_CommitAudioProfile,
+			NULL, NULL, 0);
 		break;
 	case CTL_FUNCTION_AMP_CTL:
 		aTrace(LOG_ALSA_INTERFACE,
@@ -1832,7 +1959,7 @@ static const DECLARE_TLV_DB_SCALE(caph_db_scale_volume, -5000, 1, 0);
 #define BRCM_MIXER_CTRL_SWITCH(dev, subdev, xname, xindex, private_val) \
 	BRCM_MIXER_CTRL_GENERAL(SNDRV_CTL_ELEM_IFACE_MIXER, dev, subdev, \
 	xname, xindex, SNDRV_CTL_ELEM_ACCESS_READWRITE, 0, \
-	snd_ctl_boolean_stereo_info, SwitchCtrlGet, SwitchCtrlPut, 0, \
+	snd_ctl_boolean_mono_info, SwitchCtrlGet, SwitchCtrlPut, 0, \
 	private_val)
 
 #define BRCM_MIXER_CTRL_SELECTION(dev, subdev, xname, xindex, private_val) \
@@ -1923,7 +2050,7 @@ static const DECLARE_TLV_DB_SCALE(caph_db_scale_volume, -5000, 1, 0);
 /*
  * Initial data of controls, runtime data is in 'chip' data structure
  */
-static TPcm_Stream_Ctrls sgCaphStreamCtls[CAPH_MAX_PCM_STREAMS] __devinitdata
+static TPcm_Stream_Ctrls sgCaphStreamCtls[CAPH_MAX_PCM_STREAMS] 
 = {
 	/*
 	 * PCMOut1
@@ -1978,6 +2105,16 @@ static TPcm_Stream_Ctrls sgCaphStreamCtls[CAPH_MAX_PCM_STREAMS] __devinitdata
 	 .strStreamName = "C2",
 	 .ctlLine = BCM_CTL_SRC_LINES,
 	 },
+	  /*
+	 * Capture Mix O/P In
+	 */
+	{
+	 .iFlags = MIXER_STREAM_FLAGS_CAPTURE,
+	 .iTotalCtlLines = MIC_TOTAL_COUNT_FOR_USER,
+	 .iLineSelect = {AUDIO_SOURCE_IHF, AUDIO_SOURCE_IHF},
+	 .strStreamName = "C3",
+	 .ctlLine = BCM_CTL_SRC_LINES,
+	 },
 	/*
 	 * VOIP In
 	 */
@@ -2015,7 +2152,7 @@ static TPcm_Stream_Ctrls sgCaphStreamCtls[CAPH_MAX_PCM_STREAMS] __devinitdata
 /*
   * Misc controls
   */
-static struct snd_kcontrol_new sgSndCtrls[] __devinitdata = {
+static struct snd_kcontrol_new sgSndCtrls[] = {
 	BRCM_MIXER_CTRL_MISC(0, 0, "LPT", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 					      CTL_FUNCTION_LOOPBACK_TEST)),
@@ -2082,15 +2219,24 @@ static struct snd_kcontrol_new sgSndCtrls[] __devinitdata = {
 	BRCM_MIXER_CTRL_MISC(0, 0, "FM-VOL-LEVEL", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_FM, 0,
 				 CTL_FUNCTION_VOL)),
-	BRCM_MIXER_CTRL_MISC(0, 0, "P1-CHG", 0,
+	BRCM_MIXER_CTRL_MISC(0, 0, "P1-ADD", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_PCMOUT1, 0,
-				 CTL_FUNCTION_SINK_CHG)),
-	BRCM_MIXER_CTRL_MISC(0, 0, "P2-CHG", 0,
+				 CTL_FUNCTION_SINK_CHG_ADD)),
+	BRCM_MIXER_CTRL_MISC(0, 0, "P1-REM", 0,
+			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_PCMOUT1, 0,
+				 CTL_FUNCTION_SINK_CHG_REM)),
+	BRCM_MIXER_CTRL_MISC(0, 0, "P2-ADD", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_PCMOUT2, 0,
-				 CTL_FUNCTION_SINK_CHG)),
+				 CTL_FUNCTION_SINK_CHG_ADD)),
+	BRCM_MIXER_CTRL_MISC(0, 0, "P2-REM", 0,
+			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_PCMOUT2, 0,
+				 CTL_FUNCTION_SINK_CHG_REM)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "APP-SEL", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_APP_SEL)),
+	BRCM_MIXER_CTRL_MISC(0, 0, "MODE-SEL", 0,
+			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
+				 CTL_FUNCTION_MODE_SEL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "APP-RMV", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_APP_RMV)),
@@ -2153,7 +2299,7 @@ static struct snd_kcontrol_new sgSndCtrls[] __devinitdata = {
 				 CTL_FUNCTION_HW_CTL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_ECHO_REF_MIC,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
-				 CTL_FUNCTION_HW_CTL)),				 	
+				 CTL_FUNCTION_HW_CTL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_READ_GAIN,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_HW_CTL)),
@@ -2173,12 +2319,15 @@ static struct snd_kcontrol_new sgSndCtrls[] __devinitdata = {
 	BRCM_MIXER_CTRL_MISC(0, 0, "AMP-CTL", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_AMP_CTL)),
+	BRCM_MIXER_CTRL_MISC(0, 0, "COMMIT-AUD-PROFILE", 0,
+				CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
+				CTL_FUNCTION_COMMIT_AUD_PROFILE)),
 };
 
 #define	MAX_CTL_NUMS	161
 #define	MAX_CTL_NAME_LENGTH	44
-static char gStrCtlNames[MAX_CTL_NUMS][MAX_CTL_NAME_LENGTH] __devinitdata;
-static Int32 sgCaphSpeechMixCtrls[CAPH_MAX_PCM_STREAMS] __devinitdata = { 1, 1,
+static char gStrCtlNames[MAX_CTL_NUMS][MAX_CTL_NAME_LENGTH] ;
+static Int32 sgCaphSpeechMixCtrls[CAPH_MAX_PCM_STREAMS] = { 1, 1,
 	0, 3, 3, 0, 0, 1
 };
 
@@ -2189,7 +2338,7 @@ static Int32 sgCaphSpeechMixCtrls[CAPH_MAX_PCM_STREAMS] __devinitdata = { 1, 1,
   * Create control device.
   * Return 0 for success, non-zero for error code
   */
-int __devinit ControlDeviceNew(struct snd_card *card)
+int ControlDeviceNew(struct snd_card *card)
 {
 	unsigned int idx, j;
 	int err = 0;
@@ -2287,8 +2436,7 @@ int __devinit ControlDeviceNew(struct snd_card *card)
 						snd_ctl_new1(&kctlMute, pChip));
 				if (err < 0) {
 					aError("error to add mute for"
-					       " idx=%d j=%d err=%d\n", idx, j,
-					       err);
+					       " idx=%d j=%d err=%d\n", idx, j, err);
 					return err;
 				}
 			}

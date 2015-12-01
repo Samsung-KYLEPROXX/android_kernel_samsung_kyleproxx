@@ -61,13 +61,6 @@
 
 #include <mach/hardware.h>
 
-#include <linux/hrtimer.h>
-#include <linux/ktime.h>
-#define MS_TO_NS(x) (x * 1E6L)
-//static struct hrtimer hr_timer;
-//static ktime_t ktime;
-//static int isHRTimActive;
-
 #include "mobcom_types.h"
 #include "resultcode.h"
 #include "audio_consts.h"
@@ -133,10 +126,6 @@ UInt8 playback_audiotest_srcmixer[] = { 0 };
 #define BRCM_AUDDRV_NAME_MAX (15)	/* max 15 char for test name */
 #define BRCM_AUDDRV_TESTVAL  (5)	/* max no of arg for each test */
 
-#define	PCM_TEST_MAX_PLAYBACK_BUF_BYTES		(100*1024)
-#define	PCM_TEST_MAX_CAPTURE_BUF_BYTES		(100*1024)
-#define TEST_BUF_SIZE   (512 * 1024)
-
 static int sgBrcm_auddrv_TestValues[BRCM_AUDDRV_TESTVAL];
 static char *sgBrcm_auddrv_TestName[] = { "Aud_play",
 	"Aud_Rec", "Aud_control" };
@@ -183,44 +172,8 @@ static void AudDrv_VOIP_FillDL_CB(void *pPrivate, u8 *pDst, u32 nSize, u32 *time
 /* static UInt8 sVoIPAMRSilenceFrame[1] = {0x000f}; */
 static UInt32 delay_count;	/* 20ms each count */
 
-//static int timer_i;
-#if 0
-static enum hrtimer_restart TimerFunction(struct hrtimer *timer)
-{
-#ifdef CONFIG_AUDIO_S2
-	switch (timer_i++) {
-	case 0:
-			S2_vibtonz_en(1);
-		break;
-
-	case 1:
-	case 2:
-			S2_vibtonz_pwm(125);
-		break;
-
-	case 3:
-	case 4:
-			S2_vibtonz_pwm(-125);
-		break;
-
-	case 5:
-			S2_vibtonz_en(0);
-		break;
-
-	default:
-		break;
-	}
-#endif
-	if (timer_i > 5)
-		return HRTIMER_NORESTART;
-
-	hrtimer_forward_now(timer, ktime_set(0, (5 * 1000000)));
-	return HRTIMER_RESTART;
-}
-#endif
-
 /* callback for buffer ready of pull mode */
-static void AudDrv_VOIP_DumpUL_CB(void *pPrivate, u8 * pSrc, u32 nSize)
+static void AudDrv_VOIP_DumpUL_CB(void *pPrivate, u8 *pSrc, u32 nSize)
 {
 	UInt32 copied = 0;
 
@@ -303,40 +256,41 @@ static ssize_t Brcm_auddrv_TestSysfs_store(struct device *dev,
 	switch (sgBrcm_auddrv_TestValues[0]) {
 	case 1:		/* Aud_play */
 		{
-			aTrace(LOG_AUDIO_DRIVER,
+		aTrace(LOG_AUDIO_DRIVER,
 				"Case 1 (Aud_play): type =%s"
 				" arg1=%d, arg2=%d, arg3=%d, arg4=%d\n",
-			     sgBrcm_auddrv_TestName[sgBrcm_auddrv_TestValues[0] - 1],
-			     sgBrcm_auddrv_TestValues[1],
-			     sgBrcm_auddrv_TestValues[2],
-			     sgBrcm_auddrv_TestValues[3],
-			     sgBrcm_auddrv_TestValues[4]);
-			HandlePlayCommand();
-			break;
+				sgBrcm_auddrv_TestName[sgBrcm_auddrv_TestValues[0] - 1],
+				sgBrcm_auddrv_TestValues[1],
+				sgBrcm_auddrv_TestValues[2],
+				sgBrcm_auddrv_TestValues[3],
+				sgBrcm_auddrv_TestValues[4]);
+		HandlePlayCommand();
+		break;
 		}
 	case 2:		/* Aud_rec */
 		{
-			aTrace(LOG_AUDIO_DRIVER, "Case 2 (Aud_Rec): type ="
+		aTrace(LOG_AUDIO_DRIVER, "Case 2 (Aud_Rec): type ="
 				"%s arg1=%d, arg2=%d, arg3=%d, arg4=%d\n",
-			     sgBrcm_auddrv_TestName[sgBrcm_auddrv_TestValues[0] - 1],
-			     sgBrcm_auddrv_TestValues[1],
-			     sgBrcm_auddrv_TestValues[2],
-			     sgBrcm_auddrv_TestValues[3],
-			     sgBrcm_auddrv_TestValues[4]);
-			HandleCaptCommand();
-			break;
+				sgBrcm_auddrv_TestName[sgBrcm_auddrv_TestValues[0] - 1],
+				sgBrcm_auddrv_TestValues[1],
+				sgBrcm_auddrv_TestValues[2],
+				sgBrcm_auddrv_TestValues[3],
+				sgBrcm_auddrv_TestValues[4]);
+		HandleCaptCommand();
+		break;
 		}
 	case 3:		/* Aud_control */
 		{
-			aTrace(LOG_AUDIO_DRIVER, "case 3 (Aud_Ctrl):type ="
+		aTrace(LOG_AUDIO_DRIVER, "case 3 (Aud_Ctrl):type ="
 				"%s arg1=%d, arg2=%d, arg3=%d, arg4=%d\n",
-			     sgBrcm_auddrv_TestName[sgBrcm_auddrv_TestValues[0] - 1],
-			     sgBrcm_auddrv_TestValues[1],
-			     sgBrcm_auddrv_TestValues[2],
-			     sgBrcm_auddrv_TestValues[3],
-			     sgBrcm_auddrv_TestValues[4]);
-			HandleControlCommand();
-			break;
+				sgBrcm_auddrv_TestName[sgBrcm_auddrv_TestValues[0] - 1],
+				sgBrcm_auddrv_TestValues[1],
+				sgBrcm_auddrv_TestValues[2],
+				sgBrcm_auddrv_TestValues[3],
+				sgBrcm_auddrv_TestValues[4]);
+
+		HandleControlCommand();
+		break;
 		}
 	default:
 		aTrace(LOG_AUDIO_DRIVER, " I am in Default case\n");
@@ -366,41 +320,41 @@ static int HandleControlCommand()
 	switch (sgBrcm_auddrv_TestValues[1]) {
 	case 1:		/* Initialize the audio controller */
 
-			aTrace(LOG_AUDIO_DRIVER, " Audio Controller Init\n");
-			AUDCTRL_Init();
-			aTrace(LOG_AUDIO_DRIVER,
-					" Audio Controller Init Complete\n");
+		aTrace(LOG_AUDIO_DRIVER, " Audio Controller Init\n");
+		AUDCTRL_Init();
+		aTrace(LOG_AUDIO_DRIVER,
+				" Audio Controller Init Complete\n");
 
 		break;
 	case 2:		/* Start Hw loopback */
-		{
-			Boolean onOff = sgBrcm_auddrv_TestValues[2];
-			mic = sgBrcm_auddrv_TestValues[3];
-			spkr = sgBrcm_auddrv_TestValues[4];
-			aTrace
-				(LOG_AUDIO_DRIVER,
-				 " Audio Loopback onOff = %d, from %d to %d\n",
-				 onOff, mic, spkr);
-			AUDCTRL_SetAudioLoopback(onOff, mic, spkr, 1);
-		}
+	{
+		Boolean onOff = sgBrcm_auddrv_TestValues[2];
+		mic = sgBrcm_auddrv_TestValues[3];
+		spkr = sgBrcm_auddrv_TestValues[4];
+		aTrace
+			(LOG_AUDIO_DRIVER,
+			 " Audio Loopback onOff = %d, from %d to %d\n",
+			 onOff, mic, spkr);
+		AUDCTRL_SetAudioLoopback(onOff, mic, spkr, 1);
+	}
 		break;
 	case 3:		/* Dump audio registers */
+	{
+		aTrace(LOG_AUDIO_DRIVER, " Dump registers\n");
+		/* dump_audio_registers(); */
 		{
-			aTrace(LOG_AUDIO_DRIVER, " Dump registers\n");
-			/* dump_audio_registers(); */
-			{
-				char *MsgBuf = NULL;
-				MsgBuf = kmalloc(2408, GFP_KERNEL);
-				if (MsgBuf == NULL) {
-					aError("kmalloc failed\n");
-					return -1;
-				}
+			char *MsgBuf = NULL;
+			MsgBuf = kmalloc(2408, GFP_KERNEL);
+			if (MsgBuf == NULL) {
+				aError("kmalloc failed\n");
+				return -1;
+			}
 
-				/* enable clock if it is not enabled. */
-				if (!bClk)
-					csl_caph_ControlHWClock(TRUE);
+			/* enable clock if it is not enabled. */
+			if (!bClk)
+				csl_caph_ControlHWClock(TRUE);
 
-				snprintf(MsgBuf, 2408,
+			snprintf(MsgBuf, 2408,
 					"0x35026800 =0x%08lx, 0x3502c910 =0x%08lx, 0x3502c990 =0x%08lx, 0x3502c900 =0x%08lx,0x3502cc20 =0x%08lx,0x35025800 =0x%08lx, 0x34000a34 =0x%08lx, 0x340004b0 =0x%08lx, 0x3400000c =0x%08lx, 0x3400047c =0x%08lx, 0x34000a40=0x%08lx\n",
 					*((UInt32 *)
 					(HW_IO_PHYS_TO_VIRT(0x35026800))),
@@ -425,9 +379,9 @@ static int HandleControlCommand()
 					*((UInt32 *)
 					(HW_IO_PHYS_TO_VIRT(0x34000a40))));
 
-				aTrace(LOG_AUDIO_DRIVER, "%s", MsgBuf);
+			aTrace(LOG_AUDIO_DRIVER, "%s", MsgBuf);
 
-				snprintf(MsgBuf, 2408,
+			snprintf(MsgBuf, 2408,
 					"0x3502f000 =0x%08lx, 04 =0x%08lx, 08 =0x%08lx, 0c =0x%08lx, 10 =0x%08lx, 14 =0x%08lx, 18 =0x%08lx, 1c =0x%08lx, 20 =0x%08lx, 24 =0x%08lx, 28 =0x%08lx, 2c =0x%08lx, 30 =0x%08lx, 34 =0x%08lx, 38 =0x%08lx, 3c =0x%08lx, 40 =0x%08lx, 44 =0x%08lx, 48 =0x%08lx, 4c =0x%08lx,50 =0x%08lx, 54 =0x%08lx, 58 =0x%08lx, 5c =0x%08lx\n",
 					*((UInt32 *)
 					(HW_IO_PHYS_TO_VIRT(0x3502f000))),
@@ -478,65 +432,65 @@ static int HandleControlCommand()
 					*((UInt32 *)
 					(HW_IO_PHYS_TO_VIRT(0x3502f05c))));
 
-				aTrace(LOG_AUDIO_DRIVER, "%s", MsgBuf);
-				kfree(MsgBuf);
+			aTrace(LOG_AUDIO_DRIVER, "%s", MsgBuf);
+			kfree(MsgBuf);
 
-				/* disable clock if it is enabled
-				   by this function */
-				if (!bClk)
-					csl_caph_ControlHWClock(FALSE);
-			}
-			aTrace(LOG_AUDIO_DRIVER, " Dump registers done\n");
-
-			break;
+			/* disable clock if it is enabled
+			   by this function */
+			if (!bClk)
+				csl_caph_ControlHWClock(FALSE);
 		}
+		aTrace(LOG_AUDIO_DRIVER, " Dump registers done\n");
+
+		break;
+	}
 	case 4:/* Enable telephony */
 
-			aTrace(LOG_AUDIO_DRIVER, " Enable telephony\n");
-			AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_ANALOG_MAIN,
-					AUDIO_SINK_HANDSET,false);
-			AUDCTRL_EnableTelephony(AUDIO_SOURCE_ANALOG_MAIN,
-					AUDIO_SINK_HANDSET);
+		aTrace(LOG_AUDIO_DRIVER, " Enable telephony\n");
+		AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_ANALOG_MAIN,
+				AUDIO_SINK_HANDSET, false);
+		AUDCTRL_EnableTelephony(AUDIO_SOURCE_ANALOG_MAIN,
+				AUDIO_SINK_HANDSET);
 #if 0
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502F050))) =
-			 (UInt32) (0x805DC990));
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502F054))) =
-			 (UInt32) (0x8000C900));
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C160))) =
-			 (UInt32) (0xFFFF7FFF));
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C240))) =
-			 (UInt32) (0x07000000));
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C244))) =
-			 (UInt32) (0x0));
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C260))) =
-			 (UInt32) (0x07000000));
-			(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C264))) =
-			 (UInt32) (0x0));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502F050))) =
+		 (UInt32) (0x805DC990));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502F054))) =
+		 (UInt32) (0x8000C900));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C160))) =
+		 (UInt32) (0xFFFF7FFF));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C240))) =
+		 (UInt32) (0x07000000));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C244))) =
+		 (UInt32) (0x0));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C260))) =
+		 (UInt32) (0x07000000));
+		(*((UInt32 *) (HW_IO_PHYS_TO_VIRT(0x3502C264))) =
+		 (UInt32) (0x0));
 #endif
 
-			aTrace(LOG_AUDIO_DRIVER, " Telephony enabled\n");
+		aTrace(LOG_AUDIO_DRIVER, " Telephony enabled\n");
 
 		break;
 	case 5:/* Disable telephony */
 
-			aTrace(LOG_AUDIO_DRIVER, " Disable telephony\n");
-			AUDCTRL_DisableTelephony();
-			aTrace(LOG_AUDIO_DRIVER, " Telephony disabled\n");
+		aTrace(LOG_AUDIO_DRIVER, " Disable telephony\n");
+		AUDCTRL_DisableTelephony();
+		aTrace(LOG_AUDIO_DRIVER, " Telephony disabled\n");
 
 		break;
 		/* VoIP loopback test */
 	case 6:
 
-			/* Val2 - Mic
+		/* Val2 - Mic
 		Val3 - speaker
 		Val4 - Delay
 		Val5 - Codectype */
 
-			AUDTST_VoIP(sgBrcm_auddrv_TestValues[2],
-					sgBrcm_auddrv_TestValues[3], 2000,
-					sgBrcm_auddrv_TestValues[4], 0);
+		AUDTST_VoIP(sgBrcm_auddrv_TestValues[2],
+				sgBrcm_auddrv_TestValues[3], 2000,
+				sgBrcm_auddrv_TestValues[4], 0);
 
-		break;
+	break;
 
 	case 8:		/* peek a register */
 	{
@@ -573,339 +527,358 @@ static int HandleControlCommand()
 		break;
 
 #if !(defined(_SAMOA_))
-/* hard code caph clocks, sometimes clock driver is not working well */
+		/* hard code caph clocks,
+		 * sometimes clock driver
+		 * is not working well
+		 */
 	case 10:
-		{
-			UInt32 regVal;
+	{
+		UInt32 regVal;
 
-			aTrace(LOG_AUDIO_DRIVER,
-					" hard code caph clock register"
+		aTrace(LOG_AUDIO_DRIVER,
+				" hard code caph clock register"
 				" for debugging..\n");
-			if (!bClk)
-				csl_caph_ControlHWClock(TRUE);
-			regVal = (0x00A5A5 <<
-				  KHUB_CLK_MGR_REG_WR_ACCESS_PASSWORD_SHIFT);
-			regVal |= KHUB_CLK_MGR_REG_WR_ACCESS_CLKMGR_ACC_MASK;
-/*
-		WRITE_REG32((HUB_CLK_BASE_ADDR+
-		KHUB_CLK_MGR_REG_WR_ACCESS_OFFSET),regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_WR_ACCESS_OFFSET))
-			 = (UInt32) regVal);
-			while (((*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET)))
-				& 0x01) == 1) {
-				continue;
-			}
-
-			/* Set the frequency policy */
-			regVal = (0x06 <<
-			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY0_FREQ_SHIFT);
-			regVal |= (0x06 <<
-			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY1_FREQ_SHIFT);
-			regVal |= (0x06 <<
-			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY2_FREQ_SHIFT);
-			regVal |= (0x06 <<
-			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY3_FREQ_SHIFT);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY_FREQ_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY_FREQ_OFFSET))
-			 = (UInt32) regVal);
-
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_AUDIOH_CLKGATE_OFFSET))
-			 = (UInt32) 0x0000FFFF);
-
-			/* Set the frequency policy */
-			regVal = 0x7FFFFFFF;
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY0_MASK1_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY0_MASK1_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY1_MASK1_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY1_MASK1_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY2_MASK1_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY2_MASK1_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY3_MASK1_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY3_MASK1_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY0_MASK2_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY0_MASK2_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY1_MASK2_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY1_MASK2_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY2_MASK2_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY2_MASK2_OFFSET))
-			 = (UInt32) regVal);
-/*
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_POLICY3_MASK2_OFFSET) ,regVal);
-*/
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY3_MASK2_OFFSET))
-			 = (UInt32) regVal);
-
-			/* start the frequency policy */
-			/* KHUB_CLK_MGR_REG_POLICY_CTL_GO_MASK
-			   | KHUB_CLK_MGR_REG_POLICY_CTL_GO_AC_MASK; */
-			regVal = 0x00000003;
-
-			/* WRITE_REG32((HUB_CLK_BASE_ADDR+
-		KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET) ,regVal); */
-
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET))
-			 = (UInt32) regVal);
-			while (((*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET)))
-				& 0x01) == 1) {
-				continue;
-			}
-
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_AUDIOH_CLKGATE_OFFSET))
-			 = (UInt32) 0x0000FFFF);
-
-			/* srcMixer clock */
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_CAPH_DIV_OFFSET))
-			 = (UInt32) 0x00000011);
-/*
-while ( ((*((UInt32 *)
-(KONA_HUB_CLK_BASE_VA+KHUB_CLK_MGR_REG_PERIPH_SEG_TRG_OFFSET))) & 0x00100000)
-== 0x00100000) {}
-*/
-
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_PERIPH_SEG_TRG_OFFSET))
-			 = (UInt32) 0x00100000);
-/*
-while ( ((*((UInt32 *)
-(KONA_HUB_CLK_BASE_VA+KHUB_CLK_MGR_REG_PERIPH_SEG_TRG_OFFSET))) & 0x00100000)
-== 0x00100000) {}
-*/
-			/* Enable all the CAPH clocks */
-#if 0
-/*
-regVal = KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_CLK_EN_MASK;
-regVal |= KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_HW_SW_GATING_SEL_MASK;
-regVal |= KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_HYST_EN_MASK;
-regVal |= KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_HYST_VAL_MASK;
-WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_CAPH_CLKGATE_OFFSET) ,regVal);
-*/
-#endif
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_CAPH_CLKGATE_OFFSET))
-			 = (UInt32) 0x1030);
-
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-			KHUB_CLK_MGR_REG_DAP_SWITCH_CLKGATE_OFFSET))
-			 = (UInt32) 0x1);
-
-			(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
-				       KHUB_CLK_MGR_REG_APB10_CLKGATE_OFFSET))
-			 = (UInt32) 0x1);
-
-			/* disable clock if it is enabled by this function. */
-			if (!bClk)
-				csl_caph_ControlHWClock(FALSE);
+		if (!bClk)
+			csl_caph_ControlHWClock(TRUE);
+		regVal = (0x00A5A5 <<
+				KHUB_CLK_MGR_REG_WR_ACCESS_PASSWORD_SHIFT);
+		regVal |= KHUB_CLK_MGR_REG_WR_ACCESS_CLKMGR_ACC_MASK;
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_WR_ACCESS_OFFSET),regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_WR_ACCESS_OFFSET))
+		 = (UInt32) regVal);
+		while (((*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET)))
+			& 0x01) == 1) {
+			continue;
 		}
+
+		/* Set the frequency policy */
+		regVal = (0x06 <<
+			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY0_FREQ_SHIFT);
+		regVal |= (0x06 <<
+			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY1_FREQ_SHIFT);
+		regVal |= (0x06 <<
+			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY2_FREQ_SHIFT);
+		regVal |= (0x06 <<
+			KHUB_CLK_MGR_REG_POLICY_FREQ_POLICY3_FREQ_SHIFT);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY_FREQ_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY_FREQ_OFFSET))
+		 = (UInt32) regVal);
+
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_AUDIOH_CLKGATE_OFFSET))
+		 = (UInt32) 0x0000FFFF);
+
+		/* Set the frequency policy */
+		regVal = 0x7FFFFFFF;
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY0_MASK1_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY0_MASK1_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY1_MASK1_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY1_MASK1_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY2_MASK1_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY2_MASK1_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY3_MASK1_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY3_MASK1_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY0_MASK2_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY0_MASK2_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY1_MASK2_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY1_MASK2_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY2_MASK2_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY2_MASK2_OFFSET))
+		 = (UInt32) regVal);
+		/*
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY3_MASK2_OFFSET) ,regVal);
+		   */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY3_MASK2_OFFSET))
+		 = (UInt32) regVal);
+
+		/* start the frequency policy */
+		/* KHUB_CLK_MGR_REG_POLICY_CTL_GO_MASK
+		   | KHUB_CLK_MGR_REG_POLICY_CTL_GO_AC_MASK; */
+		regVal = 0x00000003;
+
+		/* WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET) ,regVal); */
+
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET))
+		 = (UInt32) regVal);
+		while (((*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+					KHUB_CLK_MGR_REG_POLICY_CTL_OFFSET)))
+					& 0x01) == 1) {
+			continue;
+		}
+
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_AUDIOH_CLKGATE_OFFSET))
+		 = (UInt32) 0x0000FFFF);
+
+		/* srcMixer clock */
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_CAPH_DIV_OFFSET))
+		 = (UInt32) 0x00000011);
+		/*
+		   while ( ((*((UInt32 *)
+		   (KONA_HUB_CLK_BASE_VA+
+		   KHUB_CLK_MGR_REG_PERIPH_SEG_TRG_OFFSET))) & 0x00100000)
+		   == 0x00100000) {}
+		   */
+
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_PERIPH_SEG_TRG_OFFSET))
+		 = (UInt32) 0x00100000);
+		/*
+		   while ( ((*((UInt32 *)
+		   (KONA_HUB_CLK_BASE_VA+
+		   KHUB_CLK_MGR_REG_PERIPH_SEG_TRG_OFFSET))) & 0x00100000)
+		   == 0x00100000) {}
+		   */
+		/* Enable all the CAPH clocks */
+#if 0
+		/*
+		   regVal =
+		   KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_CLK_EN_MASK;
+		   regVal |=
+		   KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_
+		   HW_SW_GATING_SEL_MASK;
+		   regVal |=
+		   KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_HYST_EN_MASK;
+		   regVal |=
+		   KHUB_CLK_MGR_REG_CAPH_CLKGATE_CAPH_SRCMIXER_HYST_VAL_MASK;
+		   WRITE_REG32((HUB_CLK_BASE_ADDR+
+		   KHUB_CLK_MGR_REG_CAPH_CLKGATE_OFFSET) ,regVal);
+		   */
+#endif
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_CAPH_CLKGATE_OFFSET))
+		 = (UInt32) 0x1030);
+
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_DAP_SWITCH_CLKGATE_OFFSET))
+		 = (UInt32) 0x1);
+
+		(*((UInt32 *) (KONA_HUB_CLK_BASE_VA +
+			       KHUB_CLK_MGR_REG_APB10_CLKGATE_OFFSET))
+		 = (UInt32) 0x1);
+
+		/* disable clock if it is enabled by this function. */
+		if (!bClk)
+			csl_caph_ControlHWClock(FALSE);
+	}
 		break;
 #endif
 #ifndef CONFIG_ENABLE_VOIF
 	case 11:
-		{
-			/* Internal VoIF test */
-			Boolean onOff = sgBrcm_auddrv_TestValues[2];
-			AudioMode_t audMode = AUDIO_MODE_HANDSET;
-			aTrace(LOG_AUDIO_DRIVER, " VoIF test.\n");
+	{
+		/* Internal VoIF test */
+		Boolean onOff = sgBrcm_auddrv_TestValues[2];
+		AudioMode_t audMode = AUDIO_MODE_HANDSET;
+		aTrace(LOG_AUDIO_DRIVER, " VoIF test.\n");
 
-			if (onOff) {
-				VoIF_SetDelay(sgBrcm_auddrv_TestValues[3]);
-				if (sgBrcm_auddrv_TestValues[4] > 0)
-					VoIF_SetGain(sgBrcm_auddrv_TestValues
-						     [4]);
-				audMode = AUDCTRL_GetAudioMode();
+		if (onOff) {
+			VoIF_SetDelay(sgBrcm_auddrv_TestValues[3]);
+			if (sgBrcm_auddrv_TestValues[4] > 0)
+				VoIF_SetGain(sgBrcm_auddrv_TestValues
+						[4]);
+			audMode = AUDCTRL_GetAudioMode();
 				VoIF_init(audMode, 0, 0x10);
-			} else
-				VoIF_Deinit();
-		}
+		} else
+			VoIF_Deinit();
+	}
 		break;
 #endif
 
 	case 12:
-		{
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020118))) =
-				(UInt32)0x00000000);
+	{
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020118))) =
+		 (UInt32)0x00000000);
 
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020000))) =
-				(UInt32)0x00000010);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020004))) =
-				(UInt32)0x00002110);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020008))) =
-				(UInt32)0x00000014);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502000C))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020010))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020014))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020018))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502001C))) =
-				(UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020000))) =
+		 (UInt32)0x00000010);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020004))) =
+		 (UInt32)0x00002110);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020008))) =
+		 (UInt32)0x00000014);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502000C))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020010))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020014))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020018))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502001C))) =
+		 (UInt32)0x00000000);
 
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020020))) =
-				(UInt32)0x00000240);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020024))) =
-				(UInt32)0x00000240);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020028))) =
-				(UInt32)0x00000204);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502002C))) =
-				(UInt32)0x00000240);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020030))) =
-				(UInt32)0x00000240);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020034))) =
-				(UInt32)0x00004204);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020038))) =
-				(UInt32)0x00004240);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502003C))) =
-				(UInt32)0x00000808);
-
-
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020040))) =
-				(UInt32)0x00000808);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020044))) =
-				(UInt32)0x00000004);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020048))) =
-				(UInt32)0x00000808);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502004C))) =
-				(UInt32)0x00000808);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020050))) =
-				(UInt32)0x00000005);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020054))) =
-				(UInt32)0x00000808);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020058))) =
-				(UInt32)0x00000808);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502005C))) =
-				(UInt32)0x00000808);
-
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020060))) =
-				(UInt32)0x00000001);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020064))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020068))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502006C))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020070))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020074))) =
-				(UInt32)0x10001000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020078))) =
-				(UInt32)0x10001000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502007C))) =
-				(UInt32)0x00000101);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020020))) =
+		 (UInt32)0x00000240);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020024))) =
+		 (UInt32)0x00000240);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020028))) =
+		 (UInt32)0x00000204);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502002C))) =
+		 (UInt32)0x00000240);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020030))) =
+		 (UInt32)0x00000240);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020034))) =
+		 (UInt32)0x00004204);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020038))) =
+		 (UInt32)0x00004240);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502003C))) =
+		 (UInt32)0x00000808);
 
 
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020080))) =
-				(UInt32)0x00000010);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020084))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020088))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502008C))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020080))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020084))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020088))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502008C))) =
-				(UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020040))) =
+		 (UInt32)0x00000808);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020044))) =
+		 (UInt32)0x00000004);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020048))) =
+		 (UInt32)0x00000808);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502004C))) =
+		 (UInt32)0x00000808);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020050))) =
+		 (UInt32)0x00000005);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020054))) =
+		 (UInt32)0x00000808);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020058))) =
+		 (UInt32)0x00000808);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502005C))) =
+		 (UInt32)0x00000808);
+
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020060))) =
+		 (UInt32)0x00000001);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020064))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020068))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502006C))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020070))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020074))) =
+		 (UInt32)0x10001000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020078))) =
+		 (UInt32)0x10001000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502007C))) =
+		 (UInt32)0x00000101);
 
 
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200A0))) =
-				(UInt32)0xCB8B40C5);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200A4))) =
-				(UInt32)0xCB8B40C5);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200A8))) =
-				(UInt32)0xCB8B40C5);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200AC))) =
-				(UInt32)0xCB8B40C5);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200B0))) =
-				(UInt32)0xCB8B40C5);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200B4))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200B8))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200BC))) =
-				(UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020080))) =
+		 (UInt32)0x00000010);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020084))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020088))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502008C))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020080))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020084))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020088))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x3502008C))) =
+		 (UInt32)0x00000000);
 
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200C0))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200C4))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200C8))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200CC))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200D0))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200D4))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200D8))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200DC))) =
-				(UInt32)0x00000000);
 
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200E0))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200E4))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200E8))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200EC))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200F0))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200F4))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200F8))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200FC))) =
-				(UInt32)0x00000000);
-			(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020118))) =
-				(UInt32)0x00000000);
-		}
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200A0))) =
+		 (UInt32)0xCB8B40C5);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200A4))) =
+		 (UInt32)0xCB8B40C5);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200A8))) =
+		 (UInt32)0xCB8B40C5);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200AC))) =
+		 (UInt32)0xCB8B40C5);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200B0))) =
+		 (UInt32)0xCB8B40C5);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200B4))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200B8))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200BC))) =
+		 (UInt32)0x00000000);
+
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200C0))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200C4))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200C8))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200CC))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200D0))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200D4))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200D8))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200DC))) =
+		 (UInt32)0x00000000);
+
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200E0))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200E4))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200E8))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200EC))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200F0))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200F4))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200F8))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x350200FC))) =
+		 (UInt32)0x00000000);
+		(*((UInt32 *)(HW_IO_PHYS_TO_VIRT(0x35020118))) =
+		 (UInt32)0x00000000);
+	}
 		break;
-
 	case 13:
 
 		aTrace(LOG_AUDIO_DRIVER, "configure audio loopback\n");
@@ -1010,20 +983,26 @@ WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_CAPH_CLKGATE_OFFSET) ,regVal);
 
 		if (sgBrcm_auddrv_TestValues[4] == 1) {
 			en_lpbk = 1;
-			if (sgBrcm_auddrv_TestValues[3] == 1)
-				AUDCTRL_SetBTMode(BT_MODE_NB_TEST);
+			AUDCTRL_SetBTMode(BT_MODE_NB_TEST);
+
+		} else if (sgBrcm_auddrv_TestValues[4] == 2) {
+			en_lpbk = 1;
+			AUDCTRL_SetBTMode(BT_MODE_WB_TEST);
 
 		} else if (sgBrcm_auddrv_TestValues[4] == 0) {
 			en_lpbk = 2;
-			if (sgBrcm_auddrv_TestValues[3] == 1)
-				AUDCTRL_SetBTMode(BT_MODE_NB);
-		}
-		else
+			AUDCTRL_SetBTMode(BT_MODE_NB);
+
+		} else if (sgBrcm_auddrv_TestValues[4] == 3) {
+			en_lpbk = 2;
+			AUDCTRL_SetBTMode(BT_MODE_WB);
+
+		} else
 			return 0;
 
 		AUDCTRL_ConfigSSP(ssp_port, ssp_bus, en_lpbk);
 
-		/* Pad Ctl Settings SSP external loopback 
+		/* Pad Ctl Settings SSP external loopback
 		 * FM SSP4 */
 		if (sgBrcm_auddrv_TestValues[2] == 4) {
 
@@ -1032,14 +1011,14 @@ WRITE_REG32((HUB_CLK_BASE_ADDR+KHUB_CLK_MGR_REG_CAPH_CLKGATE_OFFSET) ,regVal);
 			WR_REG(0x35004824, 0x00000203); /* DCLK4*/
 			WR_REG(0x3500482C, 0x00000203); /* DCLKREQ4*/
 
-		} else if (sgBrcm_auddrv_TestValues[2] == 3 ) { /* BT SSP3 */
+		} else if (sgBrcm_auddrv_TestValues[2] == 3) { /* BT SSP3 */
+
+			WR_REG(0x35004874, 0x00000443); /* GPIO14*/
+			WR_REG(0x35004878, 0x00000443); /* GPIO15*/
+			WR_REG(0x35004854, 0x00000403); /* GPIO06 -> DI*/
+			WR_REG(0x35004858, 0x00000403); /* GPIO07 -> DO*/
+
 		}
-
-			WR_REG(0x35004874, 0x00000243); /* GPIO14*/
-			WR_REG(0x35004878, 0x00000243); /* GPIO15*/
-			WR_REG(0x35004854, 0x00000203); /* GPIO06 -> DI*/
-			WR_REG(0x35004858, 0x00000203); /* GPIO07 -> DO*/
-
 		}
 		break;
 	default:
@@ -1068,7 +1047,7 @@ static int HandlePlayCommand()
 	char *src;
 	char *dest;
 	AUDIO_DRIVER_CallBackParams_t cbParams;
-	unsigned int testint = 0;
+	static unsigned int testint;
 	static int src_used;
 
 	switch (sgBrcm_auddrv_TestValues[1]) {
@@ -1239,7 +1218,8 @@ static int HandlePlayCommand()
 		AUDCTRL_EnablePlay(AUDIO_SOURCE_MEM,
 				spkr,
 				drv_config.num_channel,
-				drv_config.sample_rate, &testint);
+				drv_config.sample_rate,
+				16 , &testint);
 
 		AUDCTRL_SetPlayVolume(AUDIO_SOURCE_MEM, spkr,
 				AUDIO_GAIN_FORMAT_mB, 0x00, 0x00,
@@ -1339,7 +1319,7 @@ static int HandleCaptCommand()
 	static dma_addr_t dma_addr;
 	static AUDIO_SOURCE_Enum_t mic = AUDIO_SOURCE_ANALOG_MAIN;
 	AUDIO_DRIVER_CallBackParams_t cbParams;
-	unsigned int path;
+	static unsigned int path;
 
 	static AUDIO_DRIVER_TYPE_t drv_type = AUDIO_DRIVER_CAPT_HQ;
 
@@ -1479,7 +1459,7 @@ static int HandleCaptCommand()
 
 		AUDIO_DRIVER_Ctrl(cdrv_handle, AUDIO_DRIVER_STOP, NULL);
 
-		AUDCTRL_DisableRecord(mic, AUDIO_SOURCE_MEM, 0);
+		AUDCTRL_DisableRecord(mic, AUDIO_SOURCE_MEM, path);
 
 		aTrace(LOG_AUDIO_DRIVER, "capture stopped\n");
 		break;
@@ -1690,7 +1670,7 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	UInt8 *dataDest = NULL;
 	UInt32 vol = 0;
 	AudioMode_t mode = AUDIO_MODE_HANDSET;
-	UInt32 codecVal = 0;
+	UInt32 codecVal = VoIP_Codec_None;
 	static AUDIO_DRIVER_HANDLE_t drv_handle;
 	AUDIO_DRIVER_CallBackParams_t cbParams;
 	AUDIO_SOURCE_Enum_t mic = (AUDIO_SOURCE_Enum_t) Val2;	/* mic */
@@ -1699,7 +1679,7 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	voip_data_t voip_codec = {0};
 	Boolean isNLPenabled = FALSE;
 
-#if 0  // sometime memory allocation fail happens so that loopback failed consequently.
+#if 0
 	if (record_test_buf == NULL)
 		record_test_buf = kzalloc(1024 * 1024, GFP_KERNEL);
 
@@ -1710,15 +1690,16 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 #endif
 
 	//codecVal = Val5;	/* 0 for 8k PCM */
-	codecVal = 0;	/* 0 for 8k PCM */
+	codecVal = VoIP_Codec_PCM_8K;	/* 0 for 8k PCM */
 
 #ifdef CONFIG_LOUDMIC_FEATURE
 	gFactory_submic = Val5; /* SS will use Val5 to set factory sub mic */
 #endif	
 
-	voip_codec.codec_type = cur_codecVal = codecVal;
+	voip_codec.codec_type_ul = cur_codecVal = codecVal;
+	voip_codec.codec_type_dl = voip_codec.codec_type_ul;
 
-	if (codecVal == 0 || codecVal == 1 || codecVal == 4)
+	if (codecVal == VoIP_Codec_PCM_8K || codecVal == VoIP_Codec_FR || codecVal == VoIP_Codec_PCM_16K)
 		Val6 = 0; /* the above codec type does not have bitrate */
 
 	voip_codec.bitrate_index = Val6; /* bitrate only for AMR */
@@ -1729,7 +1710,7 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 
 	aTrace(LOG_AUDIO_DRIVER, "\n AUDTST_VoIP codecVal %ld\n", codecVal);
 	/* VOIP_PCM_16K or VOIP_AMR_WB */
-	if ((codecVal == 4) || (codecVal == 5)) {
+	if ((codecVal == VoIP_Codec_PCM_16K) || (codecVal == VOIP_Codec_AMR_WB_7K)) {
 		/* WB has to use AUDIO_APP_VOICE_CALL_WB */
 		AUDCTRL_SaveAudioApp(AUDIO_APP_VOICE_CALL_WB);
 		AUDCTRL_SetAudioMode(mode, AUDIO_APP_VOICE_CALL_WB);
@@ -1747,29 +1728,30 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	        );
 
 	/* use sysparm to configure EC */
-	//if (mode != AUDIO_MODE_SPEAKERPHONE)
-	{
-		AUDCTRL_EC((Boolean)(AudParmP()[mode +
-		AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].echo_cancelling_enable),
-				0);
-		/* use sysparm to configure NS */
-		AUDCTRL_NS((Boolean)(AudParmP()[mode +
+#if defined(CONFIG_BCM_MODEM) && (!defined(JAVA_ZEBU_TEST))
+	AUDCTRL_EC((Boolean)(AudParmP()[mode +
+				AUDIO_APP_LOOPBACK *
+				AUDIO_MODE_NUMBER].echo_cancelling_enable),
+			0);
+	/* use sysparm to configure NS */
+	AUDCTRL_NS((Boolean)(AudParmP()[mode +
 				AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].\
 				ul_noise_suppression_enable));
-	}
+#endif
 #else	/* USE_LOOPBACK_SYSPARM */
-	if (mode != AUDIO_MODE_SPEAKERPHONE)
-	{
-		AUDCTRL_EC(FALSE, 0);
-		AUDCTRL_NS(FALSE);
-	}
+	AUDCTRL_EC(FALSE, 0);
+	AUDCTRL_NS(FALSE);
 #endif
 
 #ifdef CONFIG_ENABLE_VOIF
 	VoIF_setLoopbackMode(1);
 #endif
 
+	AUDCTRL_ConfigWait(AUDCTRL_WAIT_HSPMU_ON, 0);
+	AUDCTRL_ConfigWait(AUDCTRL_WAIT_IHFPMU_ON, 0);
 	AUDCTRL_EnableTelephony(mic, spk);
+	AUDCTRL_ConfigWait(AUDCTRL_WAIT_HSPMU_ON, -1);
+	AUDCTRL_ConfigWait(AUDCTRL_WAIT_IHFPMU_ON, -1);
 
 	// disable NLP due to volume fluctuation for loopback case only, ported from BCM215x / BCM2133x platform.
 	// reset EC/NLP after AUDCTRL_EnableTelephony() calls AUDDRV_Telephony_Init().
@@ -1787,7 +1769,7 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	/* AUDCTRL_EnableTelephony changes app to VOICE_CALL.
 	   here need to force audio APP to LOOPBACK*/
 	/* VOIP_PCM_16K or VOIP_AMR_WB */
-	if ((codecVal == 4) || (codecVal == 5)) {
+	if ((codecVal == VoIP_Codec_PCM_16K) || (codecVal == VOIP_Codec_AMR_WB_7K)) {
 		/* WB has to use AUDIO_APP_VOICE_CALL_WB */
 		AUDCTRL_SaveAudioApp(AUDIO_APP_VOICE_CALL_WB);
 		AUDCTRL_SetAudioMode(mode, AUDIO_APP_VOICE_CALL_WB);
@@ -1813,7 +1795,7 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	AUDIO_DRIVER_Ctrl(drv_handle, AUDIO_DRIVER_SET_VOIP_DL_CB,
 			(void *)&cbParams);
 
-	//dataDest = (UInt8 *) &record_test_buf[0];
+	// dataDest = (UInt8 *) &record_test_buf[0];
 	dataDest = (UInt8 *) &playback_audiotest[0];
 
 	sVtQueue = AUDQUE_Create(dataDest, 2000, 322);
@@ -1851,13 +1833,10 @@ void AUDTST_VoIP_Stop(void)
 #ifdef CONFIG_ENABLE_VOIF
 		VoIF_setLoopbackMode(0);
 #endif
-		
-		/* VOIP_PCM_16K or VOIP_AMR_WB_MODE_7k */
-		if ((cur_codecVal == 4) || (cur_codecVal == 5))
-			AUDCTRL_SetAudioMode(cur_mode, AUDIO_APP_LOOPBACK);
 
-		/*may need it to avoid crash or freeze*/
-		/*msleep(200);*/
+		/* VOIP_PCM_16K or VOIP_AMR_WB_MODE_7k */
+		if ((cur_codecVal == VoIP_Codec_PCM_16K) || (cur_codecVal == VOIP_Codec_AMR_WB_7K))
+			AUDCTRL_SetAudioMode(cur_mode, AUDIO_APP_LOOPBACK);
 
 		OSSEMAPHORE_Destroy(AUDDRV_BufDoneSema);
 		OSSEMAPHORE_Destroy(sVtQueue_Sema);

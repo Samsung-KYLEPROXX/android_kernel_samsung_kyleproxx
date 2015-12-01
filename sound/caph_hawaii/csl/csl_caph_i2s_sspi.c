@@ -39,7 +39,7 @@
 #include <string.h>
 #include "mobcom_types.h"
 #include "chal_types.h"
-//#include <plat/chal/chal_sspi.h>  // Capri SSPI files
+//#include <plat/chal/chal_sspi.h>  //Kishore add Capri SSPI files
 #include "chal_sspi_hawaii.h"
 #include "csl_caph_i2s_sspi.h"
 #include "brcm_rdb_sspil.h"
@@ -345,9 +345,6 @@ static SSPI_hw_status_t SSPI_hw_i2s_init(CSL_HANDLE handle,
 	uint32_t frmMask = 1;
 	CHAL_SSPI_PROT_t prot;
 	uint32_t dword_sz, sample_len, seq_idx;
-#if 0
-	uint32_t div;
-#endif
 
 	if (config->prot == SSPI_HW_I2S_MODE1)
 		prot = SSPI_PROT_I2S_MODE1;
@@ -384,17 +381,11 @@ static SSPI_hw_status_t SSPI_hw_i2s_init(CSL_HANDLE handle,
 	sample_len = MAX(config->rx_delay_bits + config->rx_len,
 			config->tx_len + config->tx_prepad_bits +
 			config->tx_postpad_bits);
-#if 0
-	chal_sspi_set_clk_src_select(handle, SSPI_CLK_SRC_AUDIOCLK);
 
-	div = SSP_I2S_SAMPLE_RATE / config->sampleRate;
-	chal_sspi_set_clk_divider(handle, SSPI_CLK_REF_DIVIDER,
-			(div) ? div - 1 : 0);
-#else  /* use caph clock */
+	/* use caph clock */
 	chal_sspi_set_clk_divider(handle, SSPI_CLK_REF_DIVIDER, 0);
 	chal_sspi_set_clk_src_select(handle, SSPI_CLK_SRC_CAPHCLK);
 	chal_sspi_set_caph_clk(handle, config->sampleRate, sample_len * 2);
-#endif
 
 	set_fifo_pack(handle, SSPI_FIFO_ID_RX0,
 			config->rx_len, config->rx_pack);
@@ -402,6 +393,8 @@ static SSPI_hw_status_t SSPI_hw_i2s_init(CSL_HANDLE handle,
 			config->tx_len, config->tx_pack);
 
 	chal_sspi_enable(handle, 1);
+
+	// Kishore - add Rhea code here or get Capri SSP
 	chal_sspi_get_max_fifo_size(handle, &dword_sz);
 	dword_sz >>= 2; /* change to size in DWord */
 	if (config->interleave) {
@@ -566,6 +559,7 @@ static SSPI_hw_status_t SSPI_hw_i2s_init(CSL_HANDLE handle,
 	frm_conf.tx_postpad_bits = config->tx_postpad_bits;
 	frm_conf.tx_padval = config->tx_padval;
 
+	// Kishore - add Rhea code here or get Capri SSP
 	if (chal_sspi_set_i2s_frame(handle, &frmMask, prot, frm_conf))
 		return SSPI_HW_ERR_FRAME;
 

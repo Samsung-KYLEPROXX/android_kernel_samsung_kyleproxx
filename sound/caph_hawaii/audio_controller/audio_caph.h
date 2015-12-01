@@ -110,6 +110,7 @@ enum __BRCM_AUDIO_ACTION_en_t {
 	ACTION_AUD_CfgSSP,
 	ACTION_AUD_HwCtl,
 	ACTION_AUD_AtCtl,
+	ACTION_AUD_CommitAudioProfile,
 	ACTION_AUD_TOTAL
 };
 #define BRCM_AUDIO_ACTION_en_t enum __BRCM_AUDIO_ACTION_en_t
@@ -119,6 +120,7 @@ struct __BRCM_AUDIO_Param_Start_t {
 	TIDChanOfDev *pdev_prop;
 	UInt32 channels; /* num_of_channel */
 	UInt32 rate;
+	UInt32 bitsPerSample;
 	Int32 vol[2];
 	Int32 mixMode;
 	Int32 callMode;
@@ -132,6 +134,8 @@ struct __BRCM_AUDIO_Param_Stop_t {
 	TIDChanOfDev *pdev_prop;
 	Int32 callMode;
 	int stream;
+	AUDIO_SOURCE_Enum_t source;
+	AUDIO_SINK_Enum_t sink;
 };
 #define BRCM_AUDIO_Param_Stop_t struct __BRCM_AUDIO_Param_Stop_t
 
@@ -147,6 +151,7 @@ struct __BRCM_AUDIO_Param_Resume_t {
 	TIDChanOfDev *pdev_prop;
 	UInt32 channels;
 	UInt32 rate;
+	UInt32 bits_per_sample;
 	int stream;
 };
 #define BRCM_AUDIO_Param_Resume_t struct __BRCM_AUDIO_Param_Resume_t
@@ -182,8 +187,6 @@ struct __BRCM_AUDIO_Param_BufferReady_t {
 	AUDIO_DRIVER_HANDLE_t drv_handle;
 	TIDChanOfDev *pdev_prop;
 	int stream;
-	int offset;
-	int size;
 };
 #define BRCM_AUDIO_Param_BufferReady_t struct __BRCM_AUDIO_Param_BufferReady_t
 
@@ -263,6 +266,11 @@ struct __BRCM_AUDIO_Param_SetApp_t {
 };
 #define BRCM_AUDIO_Param_SetApp_t struct __BRCM_AUDIO_Param_SetApp_t
 
+struct __BRCM_AUDIO_Param_SetMode_t {
+	int aud_mode;
+};
+#define BRCM_AUDIO_Param_SetMode_t struct __BRCM_AUDIO_Param_SetMode_t
+
 struct __BRCM_AUDIO_Param_CallMode_t {
 	UInt32 callMode;
 
@@ -331,6 +339,7 @@ union __BRCM_AUDIO_Control_Params_un_t {
 	BRCM_AUDIO_Param_FM_t parm_FM;
 	BRCM_AUDIO_Param_Prepare_t parm_prepare;
 	BRCM_AUDIO_Param_SetApp_t parm_setapp;
+	BRCM_AUDIO_Param_SetMode_t parm_setmode;
 	BRCM_AUDIO_Param_SetApp_t parm_rmapp;
 	BRCM_AUDIO_Param_CallMode_t parm_callmode;
 	BRCM_AUDIO_Param_ECNS_t parm_ecns;

@@ -28,19 +28,4 @@ obj-$(CONFIG_BCM_ALSA_SOUND) 	+= audio_vdriver_audlog.o
 obj-$(CONFIG_BCM_ALSA_SOUND) 	+= voif_handler.o
 obj-$(CONFIG_BCM_ALSA_SOUND) 	+= audio_mqueue.o
 
-#EXTRA_CFLAGS += -DEXPORT_SYMTAB
-#EXTRA_CFLAGS += -static -nostdlib -fno-pic -fno-stack-protector 
-#EXTRA_CFLAGS += -I../sound/caph/audio_driver
-
-#LVVE_Solution-objs += Engine.o
-#LVVE_Solution-objs += REL_LVVE_HPF_NF_EQ_VOL_HF_FENS_VC_WM_WB_DRC_CNG_NG_AND_ARMA8_GCC_T4D4D0_demo.a
-
-#obj-m := LVVE_Solution.o
-
-#EXTRA_CFLAGS += -DEXPORT_SYMTAB
-#EXTRA_CFLAGS += -static -nostdlib -fno-pic 
-#VoiceSolution-objs += voicesolution.o
-#VoiceSolution-objs += BCM_DiamondVoice_LIB_20130318.a
-
-#obj-m := VoiceSolution.o
 

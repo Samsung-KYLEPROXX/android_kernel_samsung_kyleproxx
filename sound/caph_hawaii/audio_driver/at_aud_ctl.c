@@ -224,10 +224,10 @@ int AtMaudMode(brcm_alsa_chip_t *pChip, Int32 ParamCount, Int32 *Params)
 		    iLineSelect[0] = mic;
 		pChip->streamCtl[CTL_STREAM_PANEL_VOICECALL - 1].
 		    iLineSelect[1] = spk;
-
+#ifdef CONFIG_BCM_MODEM
 		RPC_SetProperty(RPC_PROP_AUDIO_MODE,
 			(UInt32)(app * AUDIO_MODE_NUMBER + mode));
-
+#endif
 		/* for PCG to set new app */
 		currapp = AUDCTRL_GetAudioApp();
 		if (currapp != app) {
@@ -471,12 +471,6 @@ int AtMaudTst(brcm_alsa_chip_t *pChip, Int32 ParamCount, Int32 *Params)
 				    Params[2], Params[3], Params[4], Params[5]);
 			voip_running = TRUE;
 		}
-		break;
-
-	case 101:
-		Params[0] = (Int32) csl_caph_QueryHWClock();
-		aTrace(LOG_AUDIO_DRIVER,
-				"csl_caph_QueryHWClock %ld.\n", Params[0]);
 		break;
 
 	case 110:

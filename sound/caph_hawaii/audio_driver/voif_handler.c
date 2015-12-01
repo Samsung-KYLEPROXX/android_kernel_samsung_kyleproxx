@@ -212,8 +212,8 @@ static void work_read_thread(struct work_struct *work)
 }
 
 #else //ENABLE_INJECTION
-#define DIAMOND_BEFORE_FILE_PATH "/data/Diamond_Before.pcm"
-#define DIAMOND_AFTER_FILE_PATH "/data/Diamond_After.pcm"
+#define DIAMOND_BEFORE_FILE_PATH "/data/snd/Diamond_Before.pcm"
+#define DIAMOND_AFTER_FILE_PATH "/data/snd/Diamond_After.pcm"
 
 typedef struct 
 {

@@ -1079,15 +1079,12 @@ CHAL_SSPI_STATUS_t chal_sspi_set_pcm_frame(CHAL_HANDLE handle,
 
 		if (!mode) {
 			/* SCLK_START: 0, SCLK_END: 35, SCLK_RATIO: 1:2*/
-
-			
 			val = ((cs_len * SSPI_MASTER_CLK_CYCLE_PER_BIT) <<
 			  SSPIL_FRAME0_SCLK_DEF_FRAME0_SCLK_END_SHIFT) |
 			  (0 << SSPIL_FRAME0_SCLK_DEF_FRAME0_SCLK_RATIO_SHIFT);
 			CHAL_REG_WRITE32(REG_FRAME_ADDR(frm_idx,
 				pDevice->base + SSPIL_FRAME0_SCLK_DEF_OFFSET),
 				val);
-	
 		}
 
 		if (!mode) {
@@ -1120,7 +1117,7 @@ CHAL_SSPI_STATUS_t chal_sspi_set_pcm_frame(CHAL_HANDLE handle,
 				pDevice->base + SSPIL_FRAME0_TX_DEF_OFFSET),
 				val);
 		if (!mode) {
-			/* RX_WORD_LENGTH: 16, RX_START 4 */
+			/* RX_WORD_LENGTH: 16, RX_START 3 */
 			val = ((frm_conf[i].rx_len - 1) <<
 			  SSPIL_FRAME0_RX_DEF_FRAME0_RX_WORD_LENGTH_SHIFT) |
 			  ((3 +  frm_conf[i].rx_delay_bits) <<

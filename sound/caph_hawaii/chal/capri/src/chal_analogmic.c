@@ -1,16 +1,16 @@
 /*
  * Copyright 2012 Broadcom Corporation
-*
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
  * published by the Free Software Foundation (the "GPL").
-*
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
-*
- * A copy of the GPL is available at 
+ *
+ * A copy of the GPL is available at
  * http://www.broadcom.com/licenses/GPLv2.php, or by writing to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
@@ -65,8 +65,8 @@
 #define ACI_BASE_ADDR_VA	HW_IO_PHYS_TO_VIRT(ACI_BASE_ADDR)
 #define AUXMIC_BASE_ADDR_VA	HW_IO_PHYS_TO_VIRT(AUXMIC_BASE_ADDR)
 /*copied from Rhea cHAL */
-#define  READ_REG32(reg)            readl(reg);
-#define  WRITE_REG32(reg, value)	writel(value, reg)
+#define  READ_REG32(reg)            readl((void volatile*)reg);
+#define  WRITE_REG32(reg, value)	writel(value, (void volatile*)reg)
 
 /*
  * ****************************************************************************
@@ -326,8 +326,8 @@ void chal_audio_mic_pwrctrl(CHAL_HANDLE handle, _Bool pwronoff)
 		reg_val &= ~(AUDIOH_AUDIORX_VRX1_AUDIORX_VRX_PWRDN_MASK);
 		BRCM_WRITE_REG(base, AUDIOH_AUDIORX_VRX1, reg_val);
 
-		/* a must (10ms) to remove bias glitch per asic sequence */
-		usleep_range(10000, 10500);
+		/* a must (50ms) to remove bias glitch per asic sequence */
+		usleep_range(50000, 50500);
 
 		/* Set i_VREF_FastSettle (0) */
 		reg_val = BRCM_READ_REG(base, AUDIOH_AUDIORX_VREF);
@@ -493,8 +493,8 @@ void chal_audio_hs_mic_pwrctrl(CHAL_HANDLE handle, _Bool pwronoff)
 		    (AUDIOH_AUDIORX_VRX1_AUDIORX_VRX_SEL_MIC1B_MIC2_MASK);
 		BRCM_WRITE_REG(base, AUDIOH_AUDIORX_VRX1, reg_val);
 
-		/* a must (10ms) to remove bias glitch per asic sequence */
-		usleep_range(10000, 10500);
+		/* a must (50ms) to remove bias glitch per asic sequence */
+		usleep_range(50000, 50500);
 
 		/* Set i_VREF_FastSettle (0) */
 		reg_val = BRCM_READ_REG(base, AUDIOH_AUDIORX_VREF);
@@ -657,6 +657,7 @@ void chal_audio_mic_mute(CHAL_HANDLE handle, _Bool mute_ctrl)
 
 void chal_audio_dmic1_pwrctrl(CHAL_HANDLE handle, _Bool pwronoff)
 {
+
 	cUInt32 regVal;
 	cUInt32 function = 0x4;
 
@@ -671,7 +672,7 @@ void chal_audio_dmic1_pwrctrl(CHAL_HANDLE handle, _Bool pwronoff)
 	WRITE_REG32((KONA_PAD_CTRL_VA + PADCTRLREG_DMIC0CLK_OFFSET), regVal);
 
 	/* Select the function for DMIC0_DATA */
-	/* For function = 0 (alt_fn1), this will be set as 
+	/* For function = 0 (alt_fn1), this will be set as
 	 * DMIC1_DATA */
 	regVal = READ_REG32((KONA_PAD_CTRL_VA + PADCTRLREG_DMIC0DQ_OFFSET));
 	regVal &= (~PADCTRLREG_DMIC0DQ_PINSEL_DMIC0DQ_MASK);
