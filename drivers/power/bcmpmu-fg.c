@@ -1043,6 +1043,7 @@ static int bcmpmu_fg_get_batt_esr(struct bcmpmu_fg_data *fg, int volt, int temp)
 	struct batt_esr_temp_lut *lut = fg->pdata->batt_prop->esr_temp_lut;
 	int lut_sz = fg->pdata->batt_prop->esr_temp_lut_sz;
 	int slope, offset, esr;
+	s64 temp1;
 	int idx;
 
 	if (!lut) {
@@ -1070,8 +1071,8 @@ static int bcmpmu_fg_get_batt_esr(struct bcmpmu_fg_data *fg, int volt, int temp)
 		slope = lut[idx].esr_vf_slope;
 		offset = lut[idx].esr_vf_offset;
 	}
-	esr = (volt * slope) / 1000;
-	esr += offset;
+	temp1 = (s64)(1000 * offset) + (s64)(volt * slope);
+	esr = div64_s64(temp1, 1000);
 
 	return esr;
 }
@@ -1095,8 +1096,8 @@ static int bcmpmu_fg_get_esr(int volt, int curr, int offset,
 {
 	int esr = 0;
 	s64 temp, temp1;
-	temp = ((s64)(curr * slope) / 1000) + 1000;
-	temp1 = (s64)(1000 * offset) + (s64)(volt * slope);
+	temp = 1000000 + (s64)(curr * slope);
+	temp1 = 1000 * ((s64)(1000 * offset) + (s64)(volt * slope));
 
 	if (temp != 0)
 		esr = div64_s64(temp1, temp);
