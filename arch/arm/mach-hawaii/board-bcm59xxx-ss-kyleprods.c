@@ -1275,7 +1275,7 @@ static struct bcmpmu_batt_volt_levels ss_kyleprods_volt_levels = {
 	.critical = 3600, /* 5 % loaded OCV LUT level, not used in bcmpmu-fg.c */
 	.low = 3700, /* 15 % loaded OCV LUT level */
 	.normal = 3800, /* 45 % loaded OCV LUT level, not used in bcmpmu-fg.c */
-	.high   = 4300, /* 95 % loaded OCV LUT level */	.critical = 3400,
+	.high   = 4300, /* 95 % loaded OCV LUT level */
 	.crit_cutoff_cnt = 3,
 	.vfloat_lvl = 0x14, /* 4.345 V */
 	.vfloat_max = 0x14,
