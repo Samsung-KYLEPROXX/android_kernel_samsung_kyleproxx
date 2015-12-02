@@ -1861,6 +1861,7 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 		fg->cal_low_bat_cnt = 0;
 		fg->flags.low_bat_cal = true;
 		fg->flags.high_bat_cal = false;
+		pr_fg(FLOW, "Enter low calibration mode: cal_mode = %d\n", fg->cal_mode);
 		return;
 	} else if ((fg->cal_low_bat_cnt > 0) &&
 			(fg->adc_data.volt > cal_volt_low)) {
@@ -1877,11 +1878,13 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 		fg->flags.high_bat_cal = true;
 		fg->flags.cal_eoc_adj = false;
 		fg->flags.fully_charged = false;
+		pr_fg(FLOW, "Enter high calibration mode: cal_mode = %d\n", fg->cal_mode);
 	} else if (fg->flags.cal_eoc_adj &&
 			(fg->delta_cap_mas > 0) &&
 			(fg->capacity_info.percentage < fg->cal_eoc_point)) {
 		fg->cal_mode = CAL_MODE_EOC_ADJ;
 		fg->flags.calibration = true;
+		pr_fg(FLOW, "Enter eoc calibration mode: cal_mode = %d\n", fg->cal_mode);
 	} else if ((fg->cal_high_bat_cnt > 0) &&
 			(capacity_delta < guardband)) {
 		fg->cal_high_bat_cnt = 0;
@@ -3491,19 +3494,26 @@ static void bcmpmu_fg_periodic_work(struct work_struct *work)
 
 	fg->last_pw_tm = kona_hubtimer_get_counter();
 
-	pr_fg(VERBOSE, "flags: %d %d %d %d %d %d %d %d %d %d %d %d\n",
+	pr_fg(VERBOSE, "flags: %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
 			flags.batt_status,
 			flags.prev_batt_status,
+			flags.init_saved_cap,
 			flags.chrgr_connected,
 			flags.charging_enabled,
+			flags.batt_present,
 			flags.init_capacity,
 			flags.fg_eoc,
 			flags.reschedule_work,
 			flags.eoc_chargr_en,
 			flags.calibration,
-			flags.cv_entered,
+			flags.low_bat_cal,
+			flags.low_cal_status,
+			flags.high_bat_cal,
 			flags.fully_charged,
-			flags.cal_eoc_adj);
+			flags.coulb_dis,
+			flags.cv_entered,
+			flags.cal_eoc_adj,
+			flags.init_ocv);
 #ifndef CONFIG_WD_TAPPER
 	if (wake_lock_active(&fg->fg_alarm_wake_lock))
 		wake_unlock(&fg->fg_alarm_wake_lock);
