@@ -1860,6 +1860,7 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 		fg->flags.calibration = true;
 		fg->cal_low_bat_cnt = 0;
 		fg->flags.low_bat_cal = true;
+		fg->flags.high_bat_cal = false;
 		return;
 	} else if ((fg->cal_low_bat_cnt > 0) &&
 			(fg->adc_data.volt > cal_volt_low)) {
@@ -1868,6 +1869,7 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 	} else if (!fg->flags.calibration &&
 			!fg->flags.high_bat_cal &&
 			(capacity_delta >= guardband) &&
+			(fg->adc_data.volt > cal_volt_low) &&
 			(fg->cal_high_bat_cnt++ > CAL_CNT_THRESHOLD)) {
 		fg->cal_mode = CAL_MODE_HI_BATT;
 		fg->flags.calibration = true;
