@@ -1918,6 +1918,9 @@ static void bcmpmu_fg_update_adj_factor(struct bcmpmu_fg_data *fg)
 			(capacity_delta > GUARD_BAND_LOW_THRLD)) {
 		fg->cal_high_clr_cnt = 0;
 		pr_fg(FLOW, "clear cal_high_clr_cnt\n");
+	} else if (fg->flags.high_bat_cal &&
+		fg->prev_cap_delta < capacity_delta) {
+		fg->flags.calibration = true;
 	}
 
 	pr_fg(FLOW, "%s : cal_high_bat_cnt %d cal_high_clr_cnt %d\n",
