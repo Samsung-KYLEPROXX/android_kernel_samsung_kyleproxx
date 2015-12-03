@@ -1756,8 +1756,12 @@ static int bcmpmu_fg_get_uuc(struct bcmpmu_fg_data *fg)
 			fg->pdata->batt_prop->max_volt) {
 			clear_avg_sample_buff(fg);
 		} else {
+			/* Use average current rather than maximum discharge
+			 * current over all discharge period to calculate
+			 * the value of unusable capacity
+			 */
 			fg->max_discharge_current =
-				min(fg->max_discharge_current, curr_avg);
+				min(0, curr_avg);
 		}
 	} else if (fg->max_discharge_current < 0 && curr_avg > 0) {
 		fg->max_discharge_current = 0;
@@ -1957,8 +1961,8 @@ static void bcmpmu_fg_get_coulomb_counter(struct bcmpmu_fg_data *fg)
 
 	fg->capacity_info.ocv_cap = bcmpmu_fg_get_load_comp_capacity(fg, true);
 	fg->capacity_info.uuc = bcmpmu_fg_get_uuc(fg);
-	pr_fg(FLOW, "ocv_cap %d uuc %d\n",
-		fg->capacity_info.ocv_cap, fg->capacity_info.uuc);
+	pr_fg(FLOW, "ocv_cap %d uuc %d discharge_current: %d\n",
+		fg->capacity_info.ocv_cap, fg->capacity_info.uuc, fg->max_discharge_current);
 
 	/**
 	 * Avoid reading accumulator register earlier than
