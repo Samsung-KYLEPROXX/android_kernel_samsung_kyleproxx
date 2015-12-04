@@ -1736,6 +1736,7 @@ static int bcmpmu_fg_get_uuc(struct bcmpmu_fg_data *fg)
 	int unusable_volt;
 	int cutoff;
 	int esr;
+	s64 temp;
 
 	update_avg_sample_buff(fg);
 	curr_avg = interquartile_mean(fg->avg_sample.curr, AVG_SAMPLES);
@@ -1759,9 +1760,20 @@ static int bcmpmu_fg_get_uuc(struct bcmpmu_fg_data *fg)
 			/* Use average current rather than maximum discharge
 			 * current over all discharge period to calculate
 			 * the value of unusable capacity
+			 *
+			 * Exponential moving average is used below with
+			 * averaging period of 12 samples which corresponds
+			 * to time constant of 1 minute for polling interval
+			 * of 5 seconds
 			 */
-			fg->max_discharge_current =
-				min(0, curr_avg);
+			if (!fg->max_discharge_current)
+				fg->max_discharge_current = curr_avg;
+			else {
+				temp = 1000 * curr_avg +
+					920 * (fg->max_discharge_current - curr_avg);
+				fg->max_discharge_current =
+					div64_s64(temp, 1000);
+			}
 		}
 	} else if (fg->max_discharge_current < 0 && curr_avg > 0) {
 		fg->max_discharge_current = 0;
@@ -4113,6 +4125,21 @@ static const struct file_operations fg_soc_error_fops = {
 	.read = debugfs_get_soc_error,
 };
 
+static int debugfs_get_max_discharge_current(struct file *file, char __user *buf,
+	size_t len, loff_t *ppos)
+{
+	struct bcmpmu_fg_data *fg = file->private_data;
+	char buff[16];
+
+	snprintf(buff, sizeof(buff), "%d\n", fg->max_discharge_current);
+	return simple_read_from_buffer(buf, len, ppos, buff, strlen(buff));
+}
+
+static const struct file_operations fg_max_discharge_current_fops = {
+	.open = debugfs_fg_open,
+	.read = debugfs_get_max_discharge_current,
+};
+
 static int debugfs_get_qfc(void *data, u64 *capacity)
 {
 	struct bcmpmu_fg_data *fg = data;
@@ -4275,6 +4302,12 @@ static void bcmpmu_fg_debugfs_init(struct bcmpmu_fg_data *fg)
 	dentry_fg_file = debugfs_create_file("soc_error",
 			DEBUG_FS_PERMISSIONS, dentry_fg_dir,
 			fg, &fg_soc_error_fops);
+	if (IS_ERR_OR_NULL(dentry_fg_file))
+		goto debugfs_clean;
+
+	dentry_fg_file = debugfs_create_file("max_curr",
+			DEBUG_FS_PERMISSIONS, dentry_fg_dir,
+			fg, &fg_max_discharge_current_fops);
 	if (IS_ERR_OR_NULL(dentry_fg_file))
 		goto debugfs_clean;
 
