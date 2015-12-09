@@ -1260,7 +1260,7 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 		ocv = bcmpmu_fg_get_esr_to_ocv(volt, curr, offset, slope);
 	} else if ((curr < 0) && !fg->flags.chrgr_connected) {
 		curr = (fg->ibat_avg
-			== FAKE_IBAT_INTIAL_AVG) ? curr : -fg->ibat_avg;
+			== FAKE_IBAT_INTIAL_AVG) ? curr : fg->ibat_avg;
 		esr_vl = bcmpmu_fg_get_esr_from_ocv(lut[idx].esr_vl_lvl,
 			lut[idx].esr_vl_offset,
 			lut[idx].esr_vl_slope,
