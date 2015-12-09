@@ -1261,7 +1261,7 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 	} else if ((curr < 0) && !fg->flags.chrgr_connected) {
 		curr = (fg->ibat_avg
 			== FAKE_IBAT_INTIAL_AVG) ? curr : fg->ibat_avg;
-		esr_vl = bcmpmu_fg_get_esr_from_ocv(lut[idx].esr_vl_lvl,
+		esr_vl = bcmpmu_fg_get_esr_from_ocv(min_volt,
 			lut[idx].esr_vl_offset,
 			lut[idx].esr_vl_slope,
 			ESR_VL_PER_MARGIN);
@@ -1306,11 +1306,12 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 		slope = lut[idx].esr_vf_slope;
 		offset = lut[idx].esr_vf_offset;
 		esr = bcmpmu_fg_get_esr(volt, curr, offset, slope);
-		if ((esr > esr_vf) && (esr <= esr_vl))
+		if ((esr > esr_vf) && (esr <= esr_vl)) {
 			ocv =
 			bcmpmu_fg_get_esr_to_ocv_with_cap(fg, volt, curr, esr);
-		if ((ocv <= max_volt))
-			goto exit;
+			if ((ocv <= max_volt))
+				goto exit;
+		}
 	} else if (!bcmpmu_fg_is_cv_entered(fg)) {
 		curr = (fg->ibat_avg
 			== FAKE_IBAT_INTIAL_AVG) ? curr : fg->ibat_avg;
@@ -1340,7 +1341,7 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 	} else {
 		curr = (fg->ibat_avg
 			== FAKE_IBAT_INTIAL_AVG) ? curr : fg->ibat_avg;
-		esr_vl = bcmpmu_fg_get_esr_from_ocv(lut[idx].esr_vl_lvl,
+		esr_vl = bcmpmu_fg_get_esr_from_ocv(min_volt,
 			lut[idx].esr_vl_offset,
 			lut[idx].esr_vl_slope,
 			ESR_VL_PER_MARGIN);
@@ -1385,11 +1386,12 @@ static int bcmpmu_fg_get_batt_ocv(struct bcmpmu_fg_data *fg, int volt, int curr,
 		slope = lut[idx].esr_vf_slope;
 		offset = lut[idx].esr_vf_offset;
 		esr = bcmpmu_fg_get_esr(volt, curr, offset, slope);
-		if ((esr > esr_vf) && (esr <= esr_vl))
+		if ((esr > esr_vf) && (esr <= esr_vl)) {
 			ocv =
 			bcmpmu_fg_get_esr_to_ocv_with_cap(fg, volt, curr, esr);
-		if ((ocv <= max_volt))
-			goto exit;
+			if ((ocv <= max_volt))
+				goto exit;
+		}
 	}
 	if (ocv < min_volt) {
 		pr_fg(ERROR, "OCV below min voltage!!\n");
