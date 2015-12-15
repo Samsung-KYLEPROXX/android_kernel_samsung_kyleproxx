@@ -1299,7 +1299,8 @@ static struct bcmpmu_fg_pdata fg_pdata = {
 	/* enable HW EOC of PMU */
 	.hw_maintenance_charging = false,
 	/* floor during sleep from Hawaii HW workshop Dec7 2012 */
-	.sleep_current_ua = 1460,
+	//.sleep_current_ua = 1460,
+	.sleep_current_ua = 4500,
 	.sleep_sample_rate = 32000,
 	.fg_factor = 964, /* KyleProDS */
 
