@@ -1128,6 +1128,9 @@ static int bcmpmu_fg_get_capacitance(struct bcmpmu_fg_data *fg, int volt)
 	lut = fg->pdata->batt_prop->volt_cap_lut;
 	lut_sz = fg->pdata->batt_prop->volt_cap_lut_sz;
 
+	if (volt <= lut[lut_sz - 1].volt)
+		return lut[lut_sz - 1].cpt; /* capacitance at Min Voltage */
+
 	for (idx = 0; idx < lut_sz; idx++) {
 		if (volt >= lut[idx].volt)
 		    break;
