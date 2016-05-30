@@ -23,6 +23,10 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
+#ifdef CONFIG_MMC_BCM_SD
+#include "../host/sdhci.h"
+#endif
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -106,6 +110,26 @@ static int mmc_decode_cid(struct mmc_card *card)
 			mmc_hostname(card->host), card->csd.mmca_vsn);
 		return -EINVAL;
 	}
+
+
+	/*
+	 * Vendor specification
+	 */
+	switch (card->cid.manfid) {
+	case 0x15:
+//		printk("%s, %d : %x - Samsung semi device\n", __FUNCTION__, __LINE__, card->cid.manfid);
+		break;
+
+	case 0x45:
+//		printk("%s, %d : %x - Sandisk device\n", __FUNCTION__, __LINE__, card->cid.manfid);
+		card->quirks	|= MMC_QUIRK_RESET_FOR_CARD_INIT;
+		break;
+
+	default:
+//		printk("%s, %d : %x - Unknown device\n", __FUNCTION__, __LINE__, card->cid.manfid);
+		break;
+	}
+
 
 	return 0;
 }
@@ -262,12 +286,24 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	}
 
 	card->ext_csd.rev = ext_csd[EXT_CSD_REV];
-	if (card->ext_csd.rev > 6) {
+#ifdef CONFIG_MMC_BCM_SD
+	if (card->ext_csd.rev > 7) {
+#else
+	if (card->ext_csd.rev > 3) {
+#endif
 		pr_err("%s: unrecognised EXT_CSD revision %d\n",
 			mmc_hostname(card->host), card->ext_csd.rev);
 		err = -EINVAL;
 		goto out;
 	}
+
+
+	/***
+		NANI : To check ext_csd revision
+	***/
+	printk( "%s, %d : %s[%s],  ext_csd revision == %d\n", __FUNCTION__, __LINE__,
+		mmc_hostname(card->host), dev_name(mmc_dev(card->host)), card->ext_csd.rev );
+
 
 	card->ext_csd.raw_sectors[0] = ext_csd[EXT_CSD_SEC_CNT + 0];
 	card->ext_csd.raw_sectors[1] = ext_csd[EXT_CSD_SEC_CNT + 1];
@@ -469,7 +505,11 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			ext_csd[EXT_CSD_SEC_FEATURE_SUPPORT];
 		card->ext_csd.trim_timeout = 300 *
 			ext_csd[EXT_CSD_TRIM_MULT];
+		card->ext_csd.rpmb_size =
+			ext_csd[EXT_CSD_RPMB_SIZE_MULT] << 17;
 
+		pr_info(KERN_INFO "%s: card->ext_csd.rpmb_size: %d\n",
+			__func__, card->ext_csd.rpmb_size);
 		/*
 		 * Note that the call to mmc_part_add above defaults to read
 		 * only. If this default assumption is changed, the call must
@@ -534,6 +574,10 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.data_tag_unit_size = 0;
 		}
 	}
+
+#ifdef CONFIG_MMC_DISCARD_SAMSUNG_eMMC_SUPPORT
+	card->ext_csd.optimized_features	= ext_csd[EXT_CSD_OPTIMIZED_FEATURES];
+#endif
 
 out:
 	return err;
@@ -930,6 +974,13 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	}
 
 	if (!oldcard) {
+#if defined(CONFIG_MACH_BCM_FPGA_E)
+		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+					 EXT_CSD_BUS_WIDTH, 1, 0);
+		if (!err) {
+			mmc_set_bus_width(card->host, 2);
+		}
+#endif
 		/*
 		 * Fetch and process extended CSD.
 		 */
@@ -1346,8 +1397,15 @@ static int mmc_suspend(struct mmc_host *host)
 		err = mmc_card_sleep(host);
 		if (!err)
 			mmc_card_set_sleep(host->card);
-	} else if (!mmc_host_is_spi(host))
+	} else if (!mmc_host_is_spi(host)){
+		if ( host->card->quirks & MMC_QUIRK_RESET_FOR_CARD_INIT ) {
+//			printk("%s, %d : %s - Reset bus width before suspend\n", __FUNCTION__, __LINE__, mmc_hostname(host));
+			mmc_switch(host->card, EXT_CSD_CMD_SET_NORMAL, EXT_CSD_BUS_WIDTH, EXT_CSD_BUS_WIDTH_1, 0);
+		} else {
+//			printk("%s, %d : %s - Nothing do before suspend\n", __FUNCTION__, __LINE__, mmc_hostname(host));
+		}
 		mmc_deselect_cards(host);
+	}
 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
 	mmc_release_host(host);
 

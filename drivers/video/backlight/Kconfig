@@ -308,6 +308,13 @@ config BACKLIGHT_ADP8860
 	  To compile this driver as a module, choose M here: the module will
 	  be called adp8860_bl.
 
+ config TOUCHKEY_BACKLIGHT
+	tristate "backlight driver"
+	depends on y
+	default n
+	help
+        backlight driver.
+
 config BACKLIGHT_ADP8870
 	tristate "Backlight Driver for ADP8870 using WLED"
 	depends on BACKLIGHT_CLASS_DEVICE && I2C
@@ -319,6 +326,27 @@ config BACKLIGHT_ADP8870
 
 	  To compile this driver as a module, choose M here: the module will
 	  be called adp8870_bl.
+
+config BACKLIGHT_KTD259B
+        tristate "backlight driver"
+        depends on y
+        default n
+        help
+        backlight driver
+
+config BACKLIGHT_KTD3102
+        tristate "backlight driver"
+        depends on y
+        default n
+        help
+        backlight driver
+
+config BACKLIGHT_TPS61158
+        tristate "backlight driver"
+        depends on y
+        default n
+        help
+        backlight driver
 
 config BACKLIGHT_88PM860X
 	tristate "Backlight Driver for 88PM8606 using WLED"
@@ -359,6 +387,13 @@ config BACKLIGHT_PANDORA
 	depends on TWL4030_CORE
 	help
 	  If you have a Pandora console, say Y to enable the
+	  backlight driver.
+
+config BACKLIGHT_SGM3727
+	tristate "Backlight driver for SGM3727"
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  If your backlight control device is SGM3727, say Y to enable the
 	  backlight driver.
 
 endif # BACKLIGHT_CLASS_DEVICE

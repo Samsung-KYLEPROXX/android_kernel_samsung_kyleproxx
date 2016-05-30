@@ -53,6 +53,9 @@
 #include <linux/delay.h>
 #include <linux/stop_machine.h>
 
+#ifdef CONFIG_ARCH_KONA
+#include <mach/kona_timer.h>
+#endif
 #include "rcutree.h"
 #include <trace/events/rcu.h>
 
@@ -295,7 +298,9 @@ cpu_has_callbacks_ready_to_invoke(struct rcu_data *rdp)
 static int
 cpu_needs_another_gp(struct rcu_state *rsp, struct rcu_data *rdp)
 {
-	return *rdp->nxttail[RCU_DONE_TAIL] && !rcu_gp_in_progress(rsp);
+	return *rdp->nxttail[RCU_DONE_TAIL +
+			     ACCESS_ONCE(rsp->completed) != rdp->completed] &&
+	       !rcu_gp_in_progress(rsp);
 }
 
 /*
@@ -771,6 +776,10 @@ static void print_other_cpu_stall(struct rcu_state *rsp)
 	print_cpu_stall_info_end();
 	printk(KERN_CONT "(detected by %d, t=%ld jiffies)\n",
 	       smp_processor_id(), (long)(jiffies - rsp->gp_start));
+#ifdef CONFIG_ARCH_KONA
+	kona_hubtimer_save_state(true);
+#endif
+
 	if (ndetected == 0)
 		printk(KERN_ERR "INFO: Stall ended before state dump start\n");
 	else if (!trigger_all_cpu_backtrace())
@@ -798,6 +807,9 @@ static void print_cpu_stall(struct rcu_state *rsp)
 	print_cpu_stall_info(rsp, smp_processor_id());
 	print_cpu_stall_info_end();
 	printk(KERN_CONT " (t=%lu jiffies)\n", jiffies - rsp->gp_start);
+#ifdef CONFIG_ARCH_KONA
+	kona_hubtimer_save_state(true);
+#endif
 	if (!trigger_all_cpu_backtrace())
 		dump_stack();
 
@@ -821,7 +833,8 @@ static void check_cpu_stall(struct rcu_state *rsp, struct rcu_data *rdp)
 	j = ACCESS_ONCE(jiffies);
 	js = ACCESS_ONCE(rsp->jiffies_stall);
 	rnp = rdp->mynode;
-	if ((ACCESS_ONCE(rnp->qsmask) & rdp->grpmask) && ULONG_CMP_GE(j, js)) {
+	if (rcu_gp_in_progress(rsp) &&
+	    (ACCESS_ONCE(rnp->qsmask) & rdp->grpmask) && ULONG_CMP_GE(j, js)) {
 
 		/* We haven't checked in, so go dump stack. */
 		print_cpu_stall(rsp);

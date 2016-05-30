@@ -8,6 +8,7 @@ config ARM
 	select RTC_LIB
 	select SYS_SUPPORTS_APM_EMULATION
 	select GENERIC_ATOMIC64 if (CPU_V6 || !CPU_32v6K || !AEABI)
+	select HAVE_DMA_CONTIGUOUS if (CPU_V6 || CPU_V6K || CPU_V7)
 	select HAVE_OPROFILE if (HAVE_PERF_EVENTS)
 	select HAVE_ARCH_JUMP_LABEL if !XIP_KERNEL
 	select HAVE_ARCH_KGDB
@@ -1009,6 +1010,26 @@ config ARCH_ZYNQ
 	select USE_OF
 	help
 	  Support for Xilinx Zynq ARM Cortex A9 Platform
+
+config ARCH_KONA
+        bool "Broadcom KONA Architecture"
+        depends on MMU
+        select CPU_V7
+        select HAVE_CLK
+        select COMMON_CLKDEV
+        select CLKDEV_LOOKUP
+        select ARM_GIC
+        select GENERIC_GPIO
+        select ARCH_REQUIRE_GPIOLIB
+        select GENERIC_TIME
+        select GENERIC_CLOCKEVENTS
+        select ARCH_HAS_CPUFREQ
+        select HAVE_SCHED_CLOCK
+		select TICK_ONESHOT
+		select ARM_AMBA
+        help
+          This enables support for system based on Broadcom KONA architecture
+
 endchoice
 
 #
@@ -1074,6 +1095,11 @@ source "arch/arm/plat-omap/Kconfig"
 source "arch/arm/mach-omap1/Kconfig"
 
 source "arch/arm/mach-omap2/Kconfig"
+
+source "arch/arm/mach-hawaii/Kconfig"
+source "arch/arm/mach-java/Kconfig"
+source "arch/arm/plat-kona/Kconfig"
+source "arch/arm/mach-rhea/Kconfig"
 
 source "arch/arm/mach-orion5x/Kconfig"
 
@@ -1405,6 +1431,25 @@ config PL310_ERRATA_769419
 	  on systems with an outer cache, the store buffer is drained
 	  explicitly.
 
+config ARM_ERRATA_775420
+       bool "ARM errata: A data cache maintenance operation which aborts, might lead to deadlock"
+       depends on CPU_V7
+       help
+	 This option enables the workaround for the 775420 Cortex-A9 (r2p2,
+	 r2p6,r2p8,r2p10,r3p0) erratum. In case a date cache maintenance
+	 operation aborts with MMU exception, it might cause the processor
+	 to deadlock. This workaround puts DSB before executing ISB if
+	 an abort may occur on cache maintenance.
+
+config ARM_ERRATA_782773
+	bool "ARM errata: Updating a translation entry might cause an unexpected translation fault"
+	depends on CPU_V7
+	help
+	 This option enables the workaround for the 782773 Cortex-A9 (all r0,
+	 r2 and r3 revisions) erratum. It might cause MMU exception in case
+	 page table walk happens just after updating the existing
+	 with setting page table in L1 data cache.
+
 endmenu
 
 source "arch/arm/common/Kconfig"
@@ -1552,6 +1597,13 @@ config HAVE_ARM_SCU
 	help
 	  This option enables support for the ARM system coherency unit
 
+config HAVE_ARM_ARCH_TIMER
+	bool "Architected timer support"
+	depends on CPU_V7
+	select ARM_ARCH_TIMER
+	help
+	  This option enables support for the ARM architected timer
+
 config HAVE_ARM_TWD
 	bool
 	depends on SMP
@@ -1599,7 +1651,7 @@ config LOCAL_TIMERS
 	bool "Use local timer interrupts"
 	depends on SMP
 	default y
-	select HAVE_ARM_TWD if (!ARCH_MSM_SCORPIONMP && !EXYNOS4_MCT)
+	select HAVE_ARM_TWD if (!ARCH_MSM_SCORPIONMP && !EXYNOS4_MCT && !ARCH_KONA)
 	help
 	  Enable support for local timers on SMP platforms, rather then the
 	  legacy IPI broadcast method.  Local timers allows the system
@@ -1721,6 +1773,17 @@ config ARCH_SELECT_MEMORY_MODEL
 
 config HAVE_ARCH_PFN_VALID
 	def_bool ARCH_HAS_HOLES_MEMORYMODEL || !SPARSEMEM
+
+config ARCH_ENABLE_MEMORY_HOTPLUG
+        def_bool y
+
+config ARCH_ENABLE_MEMORY_HOTREMOVE
+        def_bool y
+        depends on MEMORY_HOTPLUG
+
+config ARCH_MEMORY_PROBE
+        def_bool y
+        depends on MEMORY_HOTPLUG
 
 config HIGHMEM
 	bool "High Memory Support"
@@ -1884,6 +1947,15 @@ config DEPRECATED_PARAM_STRUCT
 	help
 	  This was deprecated in 2001 and announced to live on for 5 years.
 	  Some old boot loaders still use this way.
+
+config ARM_FLUSH_CONSOLE_ON_RESTART
+	bool "Force flush the console on restart"
+	help
+	  If the console is locked while the system is rebooted, the messages
+	  in the temporary logbuffer would not have propogated to all the
+	  console drivers. This option forces the console lock to be
+	  released if it failed to be acquired, which will cause all the
+	  pending messages to be flushed.
 
 endmenu
 

@@ -73,6 +73,9 @@ struct gether {
 /* netdev setup/teardown as directed by the gadget driver */
 int gether_setup(struct usb_gadget *g, u8 ethaddr[ETH_ALEN]);
 void gether_cleanup(void);
+/* variant of gether_setup that allows customizing network device name */
+int gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
+		const char *netname);
 
 /* connect/disconnect is handled by individual functions */
 struct net_device *gether_connect(struct gether *);
@@ -100,6 +103,8 @@ int eem_bind_config(struct usb_configuration *c);
 #ifdef USB_ETH_RNDIS
 
 int rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN]);
+int rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
+				u32 vendorID, const char *manufacturer);
 
 #else
 
@@ -109,6 +114,21 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 	return 0;
 }
 
+static inline int
+rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
+				u32 vendorID, const char *manufacturer)
+{
+	return 0;
+}
+
+#endif
+
+#ifdef CONFIG_BRCM_NETCONSOLE
+extern void brcm_current_netcon_status(unsigned char status);
+extern unsigned char brcm_get_netcon_status(void);
+#endif
+#ifdef CONFIG_USB_ETH_SKB_ALLOC_OPTIMIZATION
+extern void ncm_ntb_out_size(u32 ntb_out_size);
 #endif
 
 #endif /* __U_ETHER_H */

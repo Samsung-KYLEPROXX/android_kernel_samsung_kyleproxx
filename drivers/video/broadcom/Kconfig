@@ -1,0 +1,90 @@
+config FB_BRCM_KONA
+	tristate "Broadcom KONA Platform Framebuffer support"
+	depends on FB && ARM && ARCH_KONA
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select KONA_DSI
+	select KONA_VC4LITE
+	select KONA_SMI
+	help
+	  This framebuffer device driver is for the Broadcom KONA platform.
+
+config FB_BRCM_CP_CRASH_DUMP_IMAGE_SUPPORT
+	bool "CP Crash Dump Image Support"
+	depends on FB_BRCM_KONA
+	default N
+	help
+	  This is used for LCD to show that cp goes into crahs dump state.
+	  If you do not know about this config, please just say 'N' here.
+
+config LCD_HX8369_SUPPORT
+        tristate "LCD Panel- HX8369 controller"
+        default N
+        help
+	  WVGA LCD panel (HX8369 controller)
+
+config LCD_HX8369_CS02_SUPPORT
+        tristate "LCD Panel- HX8369 controller"
+        default N
+        help
+	  WVGA LCD panel (HX8369 controller)
+
+config LCD_SC7798_CS02_SUPPORT
+        tristate "LCD Panel- SC7798 controller"
+        default N
+        help
+	  WVGA LCD panel (SC7798 controller)
+
+config LCD_SC7798_I9060_SUPPORT
+        tristate "LCD Panel- SC7798 controller"
+        default N
+        help
+	  WVGA LCD panel (SC7798 controller)
+
+config LCD_S6E63M0X_SUPPORT
+        tristate "LCD Panel- S6E63M0X controller"
+        default N
+        help
+	  WVGA LCD panel (S6E63M0X controller)
+
+config LCD_NT35510_SUPPORT
+        tristate "LCD Panel- NT35510 controller"
+        default N
+        help
+	  WVGA LCD panel (NT35510 controller)
+
+config LCD_NT35512_SUPPORT
+        tristate "LCD Panel- NT35512 controller"
+        default N
+        help
+	  WVGA LCD panel (NT35512 controller)
+
+config PRERESERVE_BOOTLOADER_FB
+	bool "Preserve framebuffer area of Bootloader during init time"
+	default n
+	help
+		Say Y here to preserve frambuffer which is passed from bootloader. 
+		It enables to preserve framebuffer area of Bootloader until kernel frambuffer initialization is finished.
+		For this, bootloader should pass " bootloaderfb=[start address],[size]" to kernel on commandline.
+
+config LCD_LOW_TEMP_CONVERSION
+	tristate "conversion LCD seq at low temperature"
+	depends on y
+	default n
+	help
+		LCD seq conversion at low temperature
+
+config FB_BRCM_LCD_EXIST_CHECK
+	bool "Enable LCD exist check code"
+	default n
+	help
+	  Say Y here to enable LCD exist check code
+
+config LDI_MDNIE_SUPPORT
+	tristate "LDI mDNIe Driver"
+	depends on y
+	default n
+	help
+		LDI mDNIe Driver
+

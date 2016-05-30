@@ -71,6 +71,7 @@
 #define  SDHCI_CARD_PRESENT	0x00010000
 #define  SDHCI_WRITE_PROTECT	0x00080000
 #define  SDHCI_DATA_LVL_MASK	0x00F00000
+#define  SDHCI_DATA_LVL_DAT0_MASK 0x00100000
 #define   SDHCI_DATA_LVL_SHIFT	20
 
 #define SDHCI_HOST_CONTROL	0x28
@@ -262,6 +263,14 @@ struct sdhci_ops {
 
 	void	(*set_clock)(struct sdhci_host *host, unsigned int clock);
 
+#ifdef CONFIG_MMC_SDHCI_PLTFM_KONA
+        int (*set_signalling)(struct sdhci_host *host, int sig_vol);
+	int (*clk_enable)(struct sdhci_host *host, int enable);
+	int (*rpm_enabled)(struct sdhci_host *host);
+	int (*set_regulator)(struct sdhci_host *host,
+				int power_state);
+#endif			
+
 	int		(*enable_dma)(struct sdhci_host *host);
 	unsigned int	(*get_max_clock)(struct sdhci_host *host);
 	unsigned int	(*get_min_clock)(struct sdhci_host *host);
@@ -277,6 +286,8 @@ struct sdhci_ops {
 	void	(*hw_reset)(struct sdhci_host *host);
 	void	(*platform_suspend)(struct sdhci_host *host);
 	void	(*platform_resume)(struct sdhci_host *host);
+
+	void	(*sdhci_debug)(struct sdhci_host *host);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS

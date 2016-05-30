@@ -1136,8 +1136,9 @@ void __init vm_area_add_early(struct vm_struct *vm)
 		if (tmp->addr >= vm->addr) {
 			BUG_ON(tmp->addr < vm->addr + vm->size);
 			break;
-		} else
+		} else {
 			BUG_ON(tmp->addr + tmp->size > vm->addr);
+		}
 	}
 	vm->next = *p;
 	*p = vm;
@@ -1194,6 +1195,7 @@ void __init vmalloc_init(void)
 
 	vmap_area_pcpu_hole = VMALLOC_END;
 
+	pr_info("vmalloc_init complete\n");
 	vmap_initialized = true;
 }
 
@@ -1403,7 +1405,15 @@ struct vm_struct *get_vm_area_caller(unsigned long size, unsigned long flags,
 						-1, GFP_KERNEL, caller);
 }
 
-static struct vm_struct *find_vm_area(const void *addr)
+/**
+ *	find_vm_area  -  find a continuous kernel virtual area
+ *	@addr:		base address
+ *
+ *	Search for the kernel VM area starting at @addr, and return it.
+ *	It is up to the caller to do all required locking to keep the returned
+ *	pointer valid.
+ */
+struct vm_struct *find_vm_area(const void *addr)
 {
 	struct vmap_area *va;
 

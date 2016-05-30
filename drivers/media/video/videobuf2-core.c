@@ -27,7 +27,7 @@ module_param(debug, int, 0644);
 #define dprintk(level, fmt, arg...)					\
 	do {								\
 		if (debug >= level)					\
-			printk(KERN_DEBUG "vb2: " fmt, ## arg);		\
+			printk(KERN_ERR "vb2: " fmt, ## arg);		\
 	} while (0)
 
 #define call_memop(q, op, args...)					\
@@ -478,6 +478,8 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 	unsigned int num_buffers, allocated_buffers, num_planes = 0;
 	int ret = 0;
 
+	dprintk(1, "vb2_reqbufs: Enter\n");
+
 	if (q->fileio) {
 		dprintk(1, "reqbufs: file io in progress\n");
 		return -EBUSY;
@@ -547,8 +549,11 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 	 */
 	ret = call_qop(q, queue_setup, q, NULL, &num_buffers, &num_planes,
 		       q->plane_sizes, q->alloc_ctx);
-	if (ret)
+	if (ret) {
+		dprintk(1, "reqbufs: queue_setup error. num_buffers =%d\n",
+							num_buffers);
 		return ret;
+	}
 
 	/* Finally, allocate buffers and video memory */
 	ret = __vb2_queue_alloc(q, req->memory, num_buffers, num_planes);
@@ -568,8 +573,10 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 		ret = call_qop(q, queue_setup, q, NULL, &num_buffers,
 			       &num_planes, q->plane_sizes, q->alloc_ctx);
 
-		if (!ret && allocated_buffers < num_buffers)
+		if (!ret && allocated_buffers < num_buffers) {
+			dprintk(1, "reqbufs. queue_setup failed\n");
 			ret = -ENOMEM;
+		}
 
 		/*
 		 * Either the driver has accepted a smaller number of buffers,
@@ -581,6 +588,7 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 
 	if (ret < 0) {
 		__vb2_queue_free(q, allocated_buffers);
+		dprintk(1, "reqbufs: returning error\n");
 		return ret;
 	}
 
@@ -589,6 +597,7 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 	 * to the userspace.
 	 */
 	req->count = allocated_buffers;
+	dprintk(1, "vb2_reqbufs: Exit\n");
 
 	return 0;
 }
@@ -859,6 +868,9 @@ static int __fill_vb2_buffer(struct vb2_buffer *vb, const struct v4l2_buffer *b,
 	vb->v4l2_buf.timestamp = b->timestamp;
 	vb->v4l2_buf.input = b->input;
 	vb->v4l2_buf.flags = b->flags & ~V4L2_BUFFER_STATE_FLAGS;
+#ifdef CONFIG_VIDEOBUF2_DMA_RESERVED
+	vb->v4l2_buf.reserved = b->reserved;
+#endif
 
 	return 0;
 }
@@ -1165,7 +1177,7 @@ int vb2_qbuf(struct vb2_queue *q, struct v4l2_buffer *b)
 	/* Fill buffer information for the userspace */
 	__fill_v4l2_buffer(vb, b);
 
-	dprintk(1, "qbuf of buffer %d succeeded\n", vb->v4l2_buf.index);
+	dprintk(4, "qbuf of buffer %d succeeded\n", vb->v4l2_buf.index);
 unlock:
 	if (mmap_sem)
 		up_read(mmap_sem);
@@ -1352,7 +1364,7 @@ int vb2_dqbuf(struct vb2_queue *q, struct v4l2_buffer *b, bool nonblocking)
 	/* Remove from videobuf queue */
 	list_del(&vb->queued_entry);
 
-	dprintk(1, "dqbuf of buffer %d, with state %d\n",
+	dprintk(4, "dqbuf of buffer %d, with state %d\n",
 			vb->v4l2_buf.index, vb->state);
 
 	vb->state = VB2_BUF_STATE_DEQUEUED;
@@ -1415,6 +1427,8 @@ int vb2_streamon(struct vb2_queue *q, enum v4l2_buf_type type)
 	struct vb2_buffer *vb;
 	int ret;
 
+	dprintk(1, "vb2_streamon: Enter\n");
+
 	if (q->fileio) {
 		dprintk(1, "streamon: file io in progress\n");
 		return -EBUSY;
@@ -1449,7 +1463,7 @@ int vb2_streamon(struct vb2_queue *q, enum v4l2_buf_type type)
 
 	q->streaming = 1;
 
-	dprintk(3, "Streamon successful\n");
+	dprintk(1, "vb2_streamon successful\n");
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vb2_streamon);
@@ -1472,6 +1486,8 @@ EXPORT_SYMBOL_GPL(vb2_streamon);
  */
 int vb2_streamoff(struct vb2_queue *q, enum v4l2_buf_type type)
 {
+	dprintk(1, "vb2_streamoff: Enter\n");
+
 	if (q->fileio) {
 		dprintk(1, "streamoff: file io in progress\n");
 		return -EBUSY;
@@ -1493,7 +1509,7 @@ int vb2_streamoff(struct vb2_queue *q, enum v4l2_buf_type type)
 	 */
 	__vb2_queue_cancel(q);
 
-	dprintk(3, "Streamoff successful\n");
+	dprintk(1, "vb2_streamoff successful\n");
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vb2_streamoff);
@@ -1656,11 +1672,15 @@ unsigned int vb2_poll(struct vb2_queue *q, struct file *file, poll_table *wait)
 	 */
 	if (q->num_buffers == 0 && q->fileio == NULL) {
 		if (!V4L2_TYPE_IS_OUTPUT(q->type) && (q->io_modes & VB2_READ)) {
+			dprintk(1,
+				"vb2_poll,VB2_READ: calling __vb2_init_fileio\n");
 			ret = __vb2_init_fileio(q, 1);
 			if (ret)
 				return POLLERR;
 		}
 		if (V4L2_TYPE_IS_OUTPUT(q->type) && (q->io_modes & VB2_WRITE)) {
+			dprintk(1,
+				"vb2_poll,VB2_WRITE: calling __vb2_init_fileio\n");
 			ret = __vb2_init_fileio(q, 0);
 			if (ret)
 				return POLLERR;
@@ -1790,6 +1810,8 @@ static int __vb2_init_fileio(struct vb2_queue *q, int read)
 	int i, ret;
 	unsigned int count = 0;
 
+	dprintk(1, "__vb2_init_fileio: Enter\n");
+
 	/*
 	 * Sanity check
 	 */
@@ -1800,14 +1822,18 @@ static int __vb2_init_fileio(struct vb2_queue *q, int read)
 	/*
 	 * Check if device supports mapping buffers to kernel virtual space.
 	 */
-	if (!q->mem_ops->vaddr)
+	if (!q->mem_ops->vaddr) {
+		dprintk(1, "__vb2_init_fileio: vaddr invalid, return error\n");
 		return -EBUSY;
+	}
 
 	/*
 	 * Check if streaming api has not been already activated.
 	 */
-	if (q->streaming || q->num_buffers > 0)
+	if (q->streaming || q->num_buffers > 0) {
+		dprintk(1, "__vb2_init_fileio: streaming off, return error\n");
 		return -EBUSY;
+	}
 
 	/*
 	 * Start with count 1, driver can increase it in queue_setup()
@@ -1818,8 +1844,10 @@ static int __vb2_init_fileio(struct vb2_queue *q, int read)
 		(read) ? "read" : "write", count, q->io_flags);
 
 	fileio = kzalloc(sizeof(struct vb2_fileio_data), GFP_KERNEL);
-	if (fileio == NULL)
+	if (fileio == NULL) {
+		dprintk(1, "__vb2_init_fileio: alloc fail, return error\n");
 		return -ENOMEM;
+	}
 
 	fileio->flags = q->io_flags;
 
@@ -1882,7 +1910,7 @@ static int __vb2_init_fileio(struct vb2_queue *q, int read)
 	}
 
 	q->fileio = fileio;
-
+	dprintk(1, "__vb2_init_fileio: Exit with success\n");
 	return ret;
 
 err_reqbufs:
@@ -1890,6 +1918,7 @@ err_reqbufs:
 
 err_kfree:
 	kfree(fileio);
+	dprintk(1, "__vb2_init_fileio: Exit with Error\n");
 	return ret;
 }
 
@@ -1933,6 +1962,7 @@ static size_t __vb2_perform_fileio(struct vb2_queue *q, char __user *data, size_
 	struct vb2_fileio_buf *buf;
 	int ret, index;
 
+	dprintk(1, "__vb2_perform_fileio: Enter\n");
 	dprintk(3, "file io: mode %s, offset %ld, count %zd, %sblocking\n",
 		read ? "read" : "write", (long)*ppos, count,
 		nonblock ? "non" : "");

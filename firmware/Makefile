@@ -141,6 +141,18 @@ fw-shipped-$(CONFIG_USB_VICAM) += vicam/firmware.fw
 fw-shipped-$(CONFIG_VIDEO_CPIA2) += cpia2/stv0672_vp4.bin
 fw-shipped-$(CONFIG_YAM) += yam/1200.bin yam/9600.bin
 
+fw-shipped-$(CONFIG_KEYBOARD_TC360_TOUCHKEY) += coreriver/tc360.fw\
+
+TSPFIRMWARE_DIRECTORY_MMS144 = firmware/tsp_melfas/baffinlite
+ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY_MMS144) && echo yes),yes)
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS144) += tsp_melfas/baffinlite/melfas.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS144) += tsp_melfas/baffinlite/BOOT.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS144) += tsp_melfas/baffinlite/CORE.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS144) += tsp_melfas/baffinlite/CONF.fw
+else
+$(warning '$(TSPFIRMWARE_DIRECTORY_MMS144)' directory dose not exist)
+endif
+
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 
 # Directories which we _might_ need to create, so we have a rule for them.

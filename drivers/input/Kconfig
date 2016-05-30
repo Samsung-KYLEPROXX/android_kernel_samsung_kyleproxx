@@ -165,6 +165,23 @@ config INPUT_APMPOWER
 	  To compile this driver as a module, choose M here: the
 	  module will be called apm-power.
 
+config INPUT_KEYRESET
+	tristate "Reset key"
+	depends on INPUT
+	---help---
+	  Say Y here if you want to reboot when some keys are pressed;
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called keyreset.
+
+config EVDEV_QUIRK_FORCE_MONOTONIC
+	tristate "Force monotonic"
+	default n
+	depends on ARCH_RHEA
+	---help---
+	Say Y if application does not send EVIOCSCLOCKID ioctl and clock
+	used in MONOTONIC
+
 comment "Input Device Drivers"
 
 source "drivers/input/keyboard/Kconfig"

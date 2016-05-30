@@ -52,6 +52,7 @@ obj-$(CONFIG_NET_SB1000) += sb1000.o
 obj-$(CONFIG_SUNGEM_PHY) += sungem_phy.o
 obj-$(CONFIG_TR) += tokenring/
 obj-$(CONFIG_WAN) += wan/
+obj-$(CONFIG_NET_ISLAND) += island_net.o
 obj-$(CONFIG_WLAN) += wireless/
 obj-$(CONFIG_WIMAX) += wimax/
 
@@ -68,5 +69,6 @@ obj-$(CONFIG_USB_USBNET)        += usb/
 obj-$(CONFIG_USB_ZD1201)        += usb/
 obj-$(CONFIG_USB_IPHETH)        += usb/
 obj-$(CONFIG_USB_CDC_PHONET)   += usb/
-
+obj-$(CONFIG_NETCONSOLE) += netconsole.o
+obj-$(CONFIG_BRCM_NETCONSOLE) += brcm_netconsole.o
 obj-$(CONFIG_HYPERV_NET) += hyperv/

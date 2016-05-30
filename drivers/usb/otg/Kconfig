@@ -12,6 +12,14 @@ config USB_OTG_UTILS
 	  Select this to make sure the build includes objects from
 	  the OTG infrastructure directory.
 
+config USB_OTG_WAKELOCK
+	bool "Hold a wakelock when USB connected"
+	depends on WAKELOCK
+	select USB_OTG_UTILS
+	help
+	  Select this to automatically hold a wakelock when USB is
+	  connected, preventing suspend.
+
 if USB || USB_GADGET
 
 #
@@ -115,6 +123,22 @@ config FSL_USB2_OTG
 	select USB_OTG_UTILS
 	help
 	  Enable this to support Freescale USB OTG transceiver.
+
+config BCMPMU_OTG_XCEIV
+       tristate "Broadcom USB OTG Transceiver Driver"
+       select USB_OTG_UTILS
+       select KONA_USB_CONTROL
+       help
+         Enable this to support Broadcom USB OTG transceiver
+
+config USB_BCM_OTG
+       tristate "Broadcom USB OTG Driver"
+       select USB_OTG
+       select USB_SUSPEND
+       select BCMPMU_OTG_XCEIV
+       default n
+       help
+	  Enable this to support Broadcom USB OTG driver
 
 config USB_MV_OTG
 	tristate "Marvell USB OTG support"

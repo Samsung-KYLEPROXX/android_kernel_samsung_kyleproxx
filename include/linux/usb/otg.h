@@ -41,6 +41,8 @@ enum usb_phy_events {
 	USB_EVENT_ID,           /* id was grounded */
 	USB_EVENT_CHARGER,      /* usb dedicated charger */
 	USB_EVENT_ENUMERATED,   /* gadget driver enumerated */
+	USB_EVENT_SUSPEND_CORE,
+	USB_EVENT_WAKEUP_CORE
 };
 
 struct usb_phy;
@@ -76,6 +78,14 @@ struct usb_otg {
 	/* start or continue HNP role switch */
 	int	(*start_hnp)(struct usb_otg *otg);
 
+	/* set_delayed_adp */
+	int	(*set_delayed_adp)(struct usb_otg  *otg);
+
+	/* set SRP required after Vbus goes off */
+	int	(*set_srp_reqd)(struct usb_otg  *otg);
+
+	/* Set OTG enable/disable in transceiver */
+	int	(*set_otg_enable)(struct usb_otg *otg, bool enable);
 };
 
 /*
@@ -116,6 +126,9 @@ struct usb_phy {
 	/* for non-OTG B devices: set transceiver into suspend mode */
 	int	(*set_suspend)(struct usb_phy *x,
 				int suspend);
+
+	/* Control pullup */
+	int	(*pullup_on)(struct usb_phy  *x, bool on);
 
 };
 

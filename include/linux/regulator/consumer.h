@@ -143,6 +143,7 @@ void devm_regulator_put(struct regulator *regulator);
 /* regulator output control and status */
 int regulator_enable(struct regulator *regulator);
 int regulator_disable(struct regulator *regulator);
+void regulator_set_always_on(struct regulator *regulator,bool on);
 int regulator_force_disable(struct regulator *regulator);
 int regulator_is_enabled(struct regulator *regulator);
 int regulator_disable_deferred(struct regulator *regulator, int ms);
@@ -186,6 +187,8 @@ int regulator_unregister_notifier(struct regulator *regulator,
 /* driver data - core doesn't touch */
 void *regulator_get_drvdata(struct regulator *regulator);
 void regulator_set_drvdata(struct regulator *regulator, void *data);
+
+int irqsafe_is_regulator_enable(struct regulator *regulator);
 
 #else
 
@@ -342,6 +345,11 @@ static inline void *regulator_get_drvdata(struct regulator *regulator)
 static inline void regulator_set_drvdata(struct regulator *regulator,
 	void *data)
 {
+}
+
+static inline int irqsafe_is_regulator_enable(struct regulator *regulator)
+{
+	return 0;
 }
 
 #endif

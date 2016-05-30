@@ -29,6 +29,10 @@
 #include <linux/security.h>
 #include <linux/pid_namespace.h>
 
+#ifdef CONFIG_IOSCHED_CLASS_CONTROL
+#define GLOBAL_SYSTEM_UID KUIDT_INIT(1000)
+#endif
+
 int set_task_ioprio(struct task_struct *task, int ioprio)
 {
 	int err;
@@ -38,6 +42,9 @@ int set_task_ioprio(struct task_struct *task, int ioprio)
 	rcu_read_lock();
 	tcred = __task_cred(task);
 	if (tcred->uid != cred->euid &&
+#ifdef CONFIG_IOSCHED_CLASS_CONTROL
+	    !uid_eq(cred->euid,GLOBAL_SYSTEM_UID) &&
+#endif
 	    tcred->uid != cred->uid && !capable(CAP_SYS_NICE)) {
 		rcu_read_unlock();
 		return -EPERM;

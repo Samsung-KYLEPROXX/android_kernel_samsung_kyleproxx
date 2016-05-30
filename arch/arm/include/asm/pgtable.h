@@ -40,7 +40,9 @@
  */
 #define VMALLOC_OFFSET		(8*1024*1024)
 #define VMALLOC_START		(((unsigned long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
+#ifndef VMALLOC_END
 #define VMALLOC_END		0xff000000UL
+#endif
 
 #define LIBRARY_TEXT_START	0x0c000000
 
@@ -299,7 +301,6 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
  * We provide our own arch_get_unmapped_area to cope with VIPT caches.
  */
 #define HAVE_ARCH_UNMAPPED_AREA
-#define HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
 
 /*
  * remap a physical page `pfn' of size `size' with page protection `prot'

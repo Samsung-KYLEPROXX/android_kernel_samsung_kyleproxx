@@ -61,6 +61,7 @@
 #include <linux/capability.h>
 #include <linux/binfmts.h>
 
+#include <asm/system_misc.h>
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
@@ -102,6 +103,7 @@ extern char core_pattern[];
 extern unsigned int core_pipe_limit;
 extern int pid_max;
 extern int min_free_kbytes;
+extern int min_free_order_shift;
 extern int pid_max_min, pid_max_max;
 extern int sysctl_drop_caches;
 extern int percpu_pagelist_fraction;
@@ -831,6 +833,16 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 #endif
+#if defined(CONFIG_ARM) && defined(CONFIG_DEBUG_USER)
+	{
+		.procname	= "user_debug",
+		.data		= &user_debug,
+		.maxlen		= sizeof( int ),
+		.mode		= 0644,
+		.child		= NULL,
+		.proc_handler	= &proc_dointvec,
+	},
+#endif
 #if defined(CONFIG_MMU)
 	{
 		.procname	= "randomize_va_space",
@@ -1197,6 +1209,13 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= min_free_kbytes_sysctl_handler,
 		.extra1		= &zero,
+	},
+	{
+		.procname	= "min_free_order_shift",
+		.data		= &min_free_order_shift,
+		.maxlen		= sizeof(min_free_order_shift),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.procname	= "percpu_pagelist_fraction",

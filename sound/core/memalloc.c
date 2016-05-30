@@ -213,7 +213,10 @@ int snd_dma_alloc_pages(int type, struct device *device, size_t size,
 		return -ENXIO;
 	}
 	if (! dmab->area)
+	{
+		printk("snd_dma_alloc_pages fails, type=%d\n", type);
 		return -ENOMEM;
+	}
 	dmab->bytes = size;
 	return 0;
 }

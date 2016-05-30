@@ -24,6 +24,10 @@
 extern void md_autodetect_dev(dev_t dev);
 #endif
  
+#ifdef CONFIG_APANIC_ON_MMC
+extern void mmc_panic_copy_dev_name(char *dev_path, int dev_num);
+#endif
+
 /*
  * disk_name() is used by partition check code and the genhd driver.
  * It formats the devicename of the indicated disk into
@@ -144,6 +148,14 @@ ssize_t part_inflight_show(struct device *dev,
 		atomic_read(&p->in_flight[1]));
 }
 
+ssize_t partition_name_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct hd_struct *p = dev_to_part(dev);
+
+	return sprintf(buf, "%s\n", p->info->volname);
+}
+
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 ssize_t part_fail_show(struct device *dev,
 		       struct device_attribute *attr, char *buf)
@@ -176,6 +188,7 @@ static DEVICE_ATTR(discard_alignment, S_IRUGO, part_discard_alignment_show,
 		   NULL);
 static DEVICE_ATTR(stat, S_IRUGO, part_stat_show, NULL);
 static DEVICE_ATTR(inflight, S_IRUGO, part_inflight_show, NULL);
+static DEVICE_ATTR(partition_name, S_IRUGO, partition_name_show, NULL);
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 static struct device_attribute dev_attr_fail =
 	__ATTR(make-it-fail, S_IRUGO|S_IWUSR, part_fail_show, part_fail_store);
@@ -190,6 +203,7 @@ static struct attribute *part_attrs[] = {
 	&dev_attr_discard_alignment.attr,
 	&dev_attr_stat.attr,
 	&dev_attr_inflight.attr,
+	&dev_attr_partition_name.attr,
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 	&dev_attr_fail.attr,
 #endif
@@ -216,10 +230,21 @@ static void part_release(struct device *dev)
 	kfree(p);
 }
 
+static int part_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	struct hd_struct *part = dev_to_part(dev);
+
+	add_uevent_var(env, "PARTN=%u", part->partno);
+	if (part->info && part->info->volname[0])
+		add_uevent_var(env, "PARTNAME=%s", part->info->volname);
+	return 0;
+}
+
 struct device_type part_type = {
 	.name		= "partition",
 	.groups		= part_attr_groups,
 	.release	= part_release,
+	.uevent		= part_uevent,
 };
 
 static void delete_partition_rcu_cb(struct rcu_head *head)
@@ -522,6 +547,29 @@ rescan:
 		if (state->parts[p].flags & ADDPART_FLAG_RAID)
 			md_autodetect_dev(part_to_dev(part)->devt);
 #endif
+#ifdef CONFIG_APANIC_ON_MMC
+		if (strncmp(part->info->volname, CONFIG_APANIC_PLABEL,
+				strlen(CONFIG_APANIC_PLABEL)) == 0) {
+			struct device *ddev = disk_to_dev(disk);
+			char *dname, *blk_name;
+			int dev_num = -1;
+
+			dname = (char *)dev_name(ddev);
+			blk_name = kzalloc(BDEVNAME_SIZE, GFP_KERNEL);
+			if (!blk_name)
+				continue;
+
+			if (isdigit(dname[strlen(dname) - 1])) {
+				sprintf(blk_name, "%sp%d", dname, part->partno);
+				dev_num = dname[strlen(dname) - 1] - '0';
+			} else
+				sprintf(blk_name, "%s%d", dname, part->partno);
+
+			mmc_panic_copy_dev_name(blk_name, dev_num);
+			kfree(blk_name);
+		}
+#endif
+
 	}
 	kfree(state);
 	return 0;

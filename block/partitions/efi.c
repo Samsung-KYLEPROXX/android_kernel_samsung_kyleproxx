@@ -97,6 +97,8 @@
 #include <linux/ctype.h>
 #include <linux/math64.h>
 #include <linux/slab.h>
+#include <linux/nls.h>
+#include <linux/module.h>
 #include "check.h"
 #include "efi.h"
 
@@ -595,6 +597,34 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
         return 0;
 }
 
+#ifdef CONFIG_APANIC_ON_MMC
+static unsigned long apanic_partition_start;
+static unsigned long apanic_partition_size;
+#endif
+
+static struct gpt_info {
+	struct parsed_partitions partitions;
+	int num_of_partitions;
+	int erase_size;
+} gpt_info;
+
+int emmc_partition_read_proc(char *page, char **start, off_t off,
+				int count, int *eof, void *data)
+{
+	int i;
+	char *p = page;
+
+	p += sprintf(p, "dev:	     size	erasesize	name\n");
+	for (i = 0; i < gpt_info.num_of_partitions; i++) {
+		p += sprintf(p, "mmcblk0p%i: %08llx %08x \"%s\"\n", i + 1,
+				(u64)gpt_info.partitions.parts[i].size,
+				gpt_info.erase_size,
+				gpt_info.partitions.parts[i].info.volname);
+	}
+
+	return p - page;
+}
+
 /**
  * efi_partition(struct parsed_partitions *state)
  * @state
@@ -616,21 +646,33 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
  */
 int efi_partition(struct parsed_partitions *state)
 {
+	char* partition_name = NULL;
 	gpt_header *gpt = NULL;
 	gpt_entry *ptes = NULL;
 	u32 i;
 	unsigned ssz = bdev_logical_block_size(state->bdev) / 512;
 	u8 unparsed_guid[37];
 
+	partition_name = kzalloc(sizeof(ptes->partition_name), GFP_KERNEL);
+
+	if (!partition_name)
+		return 0;
+
 	if (!find_valid_gpt(state, &gpt, &ptes) || !gpt || !ptes) {
 		kfree(gpt);
 		kfree(ptes);
+		kfree(partition_name);
 		return 0;
 	}
 
 	pr_debug("GUID Partition Table is valid!  Yea!\n");
 
+	create_proc_read_entry("emmc", 0, NULL, emmc_partition_read_proc, NULL);
+	gpt_info.num_of_partitions = le32_to_cpu(gpt->num_partition_entries);
+	gpt_info.erase_size = bdev_erase_size(state->bdev) * ssz;
+
 	for (i = 0; i < le32_to_cpu(gpt->num_partition_entries) && i < state->limit-1; i++) {
+		int partition_name_len;
 		struct partition_meta_info *info;
 		unsigned label_count = 0;
 		unsigned label_max;
@@ -638,9 +680,27 @@ int efi_partition(struct parsed_partitions *state)
 		u64 size = le64_to_cpu(ptes[i].ending_lba) -
 			   le64_to_cpu(ptes[i].starting_lba) + 1ULL;
 
+		gpt_info.partitions.parts[i].size = size * ssz;
+
 		if (!is_pte_valid(&ptes[i], last_lba(state->bdev)))
 			continue;
 
+		partition_name_len = utf16s_to_utf8s(ptes[i].partition_name,
+						     sizeof(ptes[i].partition_name),
+						     UTF16_LITTLE_ENDIAN,
+						     partition_name,
+                             sizeof(ptes[i].partition_name));
+
+#ifdef CONFIG_APANIC_ON_MMC
+		if(strncmp(partition_name,CONFIG_APANIC_PLABEL,partition_name_len) == 0) {
+			apanic_partition_start = start * ssz;
+			apanic_partition_size = size * ssz;
+			pr_debug("apanic partition found starts at %lu \r\n",
+				apanic_partition_start);
+			pr_debug("apanic partition size = %lu\n",
+				apanic_partition_size);
+		}
+#endif
 		put_partition(state, i+1, start * ssz, size * ssz);
 
 		/* If this is a RAID volume, tell md */
@@ -664,12 +724,37 @@ int efi_partition(struct parsed_partitions *state)
 			if (c && !isprint(c))
 				c = '!';
 			info->volname[label_count] = c;
+			if (label_count <= partition_name_len)
+				gpt_info.partitions.parts[i].info.
+					volname[label_count] = c;
 			label_count++;
 		}
 		state->parts[i + 1].has_info = true;
+
+#ifdef CONFIG_APANIC_ON_MMC
+		if(strncmp(info->volname,CONFIG_APANIC_PLABEL,label_count) == 0) {
+			apanic_partition_start = start * ssz;
+			pr_debug("apanic partition found starts at %lu \r\n", apanic_partition_start);
+		}
+#endif
 	}
 	kfree(ptes);
 	kfree(gpt);
+	kfree(partition_name);
 	strlcat(state->pp_buf, "\n", PAGE_SIZE);
 	return 1;
 }
+
+#ifdef CONFIG_APANIC_ON_MMC
+unsigned long get_apanic_start_address(void)
+{
+	return apanic_partition_start;
+}
+EXPORT_SYMBOL(get_apanic_start_address);
+
+unsigned long get_apanic_end_address(void)
+{
+	return apanic_partition_start + apanic_partition_size;
+}
+EXPORT_SYMBOL(get_apanic_end_address);
+#endif

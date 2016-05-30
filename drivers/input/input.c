@@ -344,11 +344,17 @@ static void input_handle_event(struct input_dev *dev,
  * to 'seed' initial state of a switch or initial position of absolute
  * axis, etc.
  */
+#if defined (CONFIG_SEC_DEBUG)
+	extern void sec_debug_check_crash_key(unsigned int code, int value);
+#endif
+
 void input_event(struct input_dev *dev,
 		 unsigned int type, unsigned int code, int value)
 {
 	unsigned long flags;
-
+#if defined (CONFIG_SEC_DEBUG)
+	sec_debug_check_crash_key(code ,value);
+#endif
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
 
 		spin_lock_irqsave(&dev->event_lock, flags);
@@ -1574,9 +1580,11 @@ void input_reset_device(struct input_dev *dev)
 		 * Keys that have been pressed at suspend time are unlikely
 		 * to be still pressed when we resume.
 		 */
-		spin_lock_irq(&dev->event_lock);
-		input_dev_release_keys(dev);
-		spin_unlock_irq(&dev->event_lock);
+		/*		 
+		* spin_lock_irq(&dev->event_lock);
+		* input_dev_release_keys(dev);
+		* spin_unlock_irq(&dev->event_lock);
+		 */		
 	}
 
 	mutex_unlock(&dev->mutex);

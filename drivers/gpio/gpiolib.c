@@ -623,9 +623,11 @@ static ssize_t export_store(struct class *class,
 	 */
 
 	status = gpio_request(gpio, "sysfs");
-	if (status < 0)
+	if (status < 0) {
+		if (status == -EPROBE_DEFER)
+			status = -ENODEV;
 		goto done;
-
+	}
 	status = gpio_export(gpio, true);
 	if (status < 0)
 		gpio_free(gpio);
@@ -637,6 +639,44 @@ done:
 		pr_debug("%s: status %d\n", __func__, status);
 	return status ? : len;
 }
+
+#ifdef	CONFIG_GPIO_SYSFS_ENHANCED
+static ssize_t force_export_store(struct class *class,
+				struct class_attribute *attr,
+				const char *buf, size_t len)
+{
+	long	gpio;
+	int	status;
+	int	reserved = 0;
+
+	status = strict_strtol(buf, 0, &gpio);
+	if (status < 0)
+		goto done;
+
+	/* No extra locking here; FLAG_SYSFS just signifies that the
+	 * request and export were done by on behalf of userspace, so
+	 * they may be undone on its behalf too.
+	 */
+
+	status = gpio_request(gpio, "sysfs");
+	if (status < 0)
+		reserved = 1;
+
+	status = gpio_export(gpio, true);
+
+	if (!reserved) {
+		if (status < 0)
+			gpio_free(gpio);
+		else
+			set_bit(FLAG_SYSFS, &gpio_desc[gpio].flags);
+	}
+
+done:
+	if (status)
+		pr_debug("%s: status %d\n", __func__, status);
+	return status ? : len;
+}
+#endif
 
 static ssize_t unexport_store(struct class *class,
 				struct class_attribute *attr,
@@ -663,6 +703,13 @@ static ssize_t unexport_store(struct class *class,
 		status = 0;
 		gpio_free(gpio);
 	}
+#ifdef CONFIG_GPIO_SYSFS_ENHANCED
+	else {
+		status = 0;
+		gpio_unexport(gpio);
+	}
+#endif
+
 done:
 	if (status)
 		pr_debug("%s: status %d\n", __func__, status);
@@ -672,6 +719,9 @@ done:
 static struct class_attribute gpio_class_attrs[] = {
 	__ATTR(export, 0200, NULL, export_store),
 	__ATTR(unexport, 0200, NULL, unexport_store),
+#ifdef	CONFIG_GPIO_SYSFS_ENHANCED
+	__ATTR(force-export, 0200, NULL, force_export_store),
+#endif
 	__ATTR_NULL,
 };
 
@@ -1191,8 +1241,10 @@ int gpio_request(unsigned gpio, const char *label)
 
 	spin_lock_irqsave(&gpio_lock, flags);
 
-	if (!gpio_is_valid(gpio))
+	if (!gpio_is_valid(gpio)) {
+		status = -EINVAL;
 		goto done;
+	}
 	desc = &gpio_desc[gpio];
 	chip = desc->chip;
 	if (chip == NULL)

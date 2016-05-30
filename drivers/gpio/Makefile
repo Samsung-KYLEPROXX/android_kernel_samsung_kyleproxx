@@ -3,6 +3,8 @@
 ccflags-$(CONFIG_DEBUG_GPIO)	+= -DDEBUG
 
 obj-$(CONFIG_GPIOLIB)		+= gpiolib.o devres.o
+obj-$(CONFIG_SEC_GPIO_DVS)	+= secgpio_dvs.o
+obj-$(CONFIG_SEC_GPIO_DVS)	+= gpio_dvs/
 
 # Device drivers. Generally keep list sorted alphabetically
 obj-$(CONFIG_GPIO_GENERIC)	+= gpio-generic.o

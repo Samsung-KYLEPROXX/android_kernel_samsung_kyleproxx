@@ -249,6 +249,9 @@ static void __exit lcd_class_exit(void)
 	class_destroy(lcd_class);
 }
 
+struct device *lcd_dev;
+EXPORT_SYMBOL(lcd_dev);
+
 static int __init lcd_class_init(void)
 {
 	lcd_class = class_create(THIS_MODULE, "lcd");
@@ -257,6 +260,11 @@ static int __init lcd_class_init(void)
 				PTR_ERR(lcd_class));
 		return PTR_ERR(lcd_class);
 	}
+
+   /* sys fs */
+	lcd_dev = device_create(lcd_class, NULL, 0, NULL, "panel");
+	if (IS_ERR(lcd_dev))
+		pr_err("Failed to create device(lcd)!\n");	
 
 	lcd_class->dev_attrs = lcd_device_attributes;
 	return 0;

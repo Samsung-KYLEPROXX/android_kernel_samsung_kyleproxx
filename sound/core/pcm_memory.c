@@ -394,11 +394,15 @@ int snd_pcm_lib_malloc_pages(struct snd_pcm_substream *substream, size_t size)
 	} else {
 		dmab = kzalloc(sizeof(*dmab), GFP_KERNEL);
 		if (! dmab)
+		{
+			printk("snd_pcm_lib_malloc_pages alloc fails\n");
 			return -ENOMEM;
+		}
 		dmab->dev = substream->dma_buffer.dev;
 		if (snd_dma_alloc_pages(substream->dma_buffer.dev.type,
 					substream->dma_buffer.dev.dev,
 					size, dmab) < 0) {
+			printk("snd_dma_alloc_pages alloc fails, size = %d\n", size);
 			kfree(dmab);
 			return -ENOMEM;
 		}

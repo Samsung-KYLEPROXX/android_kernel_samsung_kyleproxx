@@ -47,7 +47,7 @@ struct usb_udc {
 static struct class *udc_class;
 static LIST_HEAD(udc_list);
 static DEFINE_MUTEX(udc_lock);
-
+extern unsigned int lp_boot_mode;
 /* ------------------------------------------------------------------------- */
 
 int usb_gadget_map_request(struct usb_gadget *gadget,
@@ -347,7 +347,10 @@ found:
 			driver->unbind(udc->gadget);
 			goto err1;
 		}
-		usb_gadget_connect(udc->gadget);
+		if(lp_boot_mode) 
+  			usb_gadget_disconnect(udc->gadget);  //usb pull up keeping down for lpm charing 
+   		else 
+			usb_gadget_connect(udc->gadget);
 	} else {
 
 		ret = usb_gadget_start(udc->gadget, driver, bind);

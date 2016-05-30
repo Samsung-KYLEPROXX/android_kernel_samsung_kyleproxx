@@ -14,6 +14,11 @@ source "drivers/pnp/Kconfig"
 
 source "drivers/block/Kconfig"
 
+source "drivers/sensors/Kconfig"
+
+# for PARAM
+source "drivers/param/Kconfig"
+
 # misc before ide - BLK_DEV_SGIIOC4 depends on SGI_IOC4
 
 source "drivers/misc/Kconfig"
@@ -60,11 +65,15 @@ source "drivers/pinctrl/Kconfig"
 
 source "drivers/gpio/Kconfig"
 
+source "drivers/pwm/Kconfig"
+
 source "drivers/w1/Kconfig"
 
 source "drivers/power/Kconfig"
 
 source "drivers/hwmon/Kconfig"
+
+source "drivers/haptic/Kconfig"
 
 source "drivers/thermal/Kconfig"
 
@@ -92,9 +101,13 @@ source "drivers/uwb/Kconfig"
 
 source "drivers/mmc/Kconfig"
 
+source "drivers/mmc-poll/Kconfig"
+
 source "drivers/memstick/Kconfig"
 
 source "drivers/leds/Kconfig"
+
+source "drivers/switch/Kconfig"
 
 source "drivers/accessibility/Kconfig"
 
@@ -139,5 +152,13 @@ source "drivers/rpmsg/Kconfig"
 source "drivers/virt/Kconfig"
 
 source "drivers/devfreq/Kconfig"
+
+source "drivers/gud/Kconfig"
+
+source "drivers/gator/Kconfig"
+
+source "drivers/nfc/Kconfig"
+
+source "drivers/motor/Kconfig"
 
 endmenu
