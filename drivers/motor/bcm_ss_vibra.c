@@ -161,7 +161,7 @@ static int vibrator_probe(struct platform_device *pdev)
 	vibrator_timed_dev.name = "vibrator";
 	vibrator_timed_dev.enable = vibrator_enable_set_timeout;
 	vibrator_timed_dev.get_time = vibrator_get_remaining_time;
-#if defined(CONFIG_MACH_CAPRI_SS_CRATER) || defined(CONFIG_MACH_HAWAII_SS_KYLEPRO)
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER) || defined(CONFIG_MACH_HAWAII_SS_KYLEPRO) || defined(CONFIG_MACH_HAWAII_SS_KYLEPRODS)
 	vib_voltage = 3300000;
 #else
 	vib_voltage = 3000000;
