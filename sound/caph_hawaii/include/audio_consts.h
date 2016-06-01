@@ -96,6 +96,8 @@ enum _AudioApp_t {
 #define	AUDIO_APP_VOICE_CALL_WB		AUDIO_APP_VOICE_1
 #define	AUDIO_APP_LOOPBACK		AUDIO_APP_VOICE_2
 #define	AUDIO_APP_VT_CALL		AUDIO_APP_VOICE_3
+#define AUDIO_APP_NREC_ON		AUDIO_APP_VOICE_2 /*BT1 grp*/
+#define AUDIO_APP_NREC_OFF		AUDIO_APP_VOICE_3 /*BT2 grp*/
 #define	AUDIO_APP_VT_CALL_WB		AUDIO_APP_VOICE_4
 #define	AUDIO_APP_VOIP			AUDIO_APP_VOICE_5
 #define	AUDIO_APP_VOIP_INCOMM		AUDIO_APP_VOICE_6
@@ -183,6 +185,9 @@ enum _AUDIO_SOURCE_Enum_t {
 		/* USB headset Mic */
 	AUDIO_SOURCE_USB,
 	AUDIO_SOURCE_I2S, /*11*/
+	AUDIO_SOURCE_EP, /* Capture Mixure Output EP/HS/IHF */
+	AUDIO_SOURCE_IHF,
+	AUDIO_SOURCE_HS,
 	/*Any valid enums that needs to be exposed to user for recording
 	needs to be added before AUDIO_SOURCE_VALID_TOTAL*/
 	AUDIO_SOURCE_RESERVED1,
@@ -229,6 +234,8 @@ enum _AUDIO_NUM_OF_CHANNEL_t {
 #define AUDIO_NUM_OF_CHANNEL_t enum _AUDIO_NUM_OF_CHANNEL_t
 
 #define AUDIO_BITS_PER_SAMPLE_t unsigned char
+
+/*#define JAVA_ZEBU_TEST*/
 
 #endif /* __KERNEL__ */
 #endif /* _AUDIO_CONSTS_H_ */

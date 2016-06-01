@@ -65,8 +65,10 @@ the GPL, without Broadcom's express prior written consent.
 #include "bcm_audio.h"
 #include "audio_trace.h"
 #include "bcmlog.h"
+#include "../../drivers/staging/android/timed_output.h"
+#ifdef CONFIG_BCM_MODEM
 #include "csl_log.h"
-
+#endif
 
 /*  Module declarations. */
 MODULE_AUTHOR("Broadcom MPS-Audio");
@@ -89,6 +91,7 @@ module_param(gAudioDebugLevel, int, 0);
 static brcm_alsa_chip_t *sgpCaph_chip;
 
 static struct caph_platform_cfg sgCaphPlatInfo;
+static struct timed_output_dev vibra_timed_dev;
 
 /* AUDIO LOGGING */
 
@@ -125,7 +128,8 @@ int logpoint_buffer_idx;
  *
  * Returns 0 for success.
  */
-static int __devinit DriverProbe(struct platform_device *pdev)
+voipdev voipchrdevpvtdata;
+static int DriverProbe(struct platform_device *pdev)
 {
 	struct snd_card *card;
 	int err;
@@ -134,8 +138,7 @@ static int __devinit DriverProbe(struct platform_device *pdev)
 
 	aTrace(LOG_ALSA_INTERFACE, "\n %lx:DriverProbe\n", jiffies);
 
-	
-	if (pdev->dev.platform_data != NULL ) {
+	if (pdev->dev.platform_data != NULL) {
 		/* Copy over platform specific data */
 		memcpy(&sgCaphPlatInfo, pdev->dev.platform_data,
 				sizeof(sgCaphPlatInfo));
@@ -143,15 +146,16 @@ static int __devinit DriverProbe(struct platform_device *pdev)
 		/* Set the platform configuration data */
 		AUDCTRL_PlatCfgSet(&sgCaphPlatInfo.aud_ctrl_plat_cfg);
 	}
-	
-	err = -ENODEV;
 
+	err = -ENODEV;
 	err = -ENOMEM;
 	err = snd_card_create(SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1,
 			      THIS_MODULE, sizeof(brcm_alsa_chip_t), &card);
 
-	if (!card)
+	if (!card) {
+		aError("card is not created!!!!!!!!");
 		goto err;
+		}
 
 	sgpCaph_chip = (brcm_alsa_chip_t *) card->private_data;
 	sgpCaph_chip->card = card;
@@ -162,16 +166,26 @@ static int __devinit DriverProbe(struct platform_device *pdev)
 	card->driver[sizeof(card->driver) - 1] = '\0';
 	/* PCM interface */
 	err = PcmDeviceNew(card);
-	if (err)
+	if (err) {
+		aError("failed PcmDeviceNew");
 		goto err;
+		}
 	/* CTRL interface */
 	err = ControlDeviceNew(card);
-	if (err)
+	if (err) {
+		aError("failed ControlDeviceNew");
 		goto err;
+		}
 	/* HWDEP interface */
-	err = HwdepDeviceNew(card);
-	if (err)
+	/*err = HwdepDeviceNew(card);*/
+
+	voipchrdevpvtdata.card = card;
+
+	err = voipdevicecreate(&voipchrdevpvtdata);
+	if (err) {
+		aError("voipDeviceCreate faileddddddddddddddd");
 		goto err;
+		}
 	/* HWDEP PTT interface */
 	err = HwdepPttDeviceNew(card);
 	if (err) {
@@ -190,13 +204,11 @@ static int __devinit DriverProbe(struct platform_device *pdev)
 
 		ret = BrcmCreateAuddrv_testSysFs(card);
 		if (ret != 0)
-			aError("ALSA DriverProbe Error to create "
-			"sysfs for Auddrv test ret = %d\n", ret);
+			aError("ALSA DriverProbe Error ret= %d\n", ret);
 #ifdef CONFIG_BCM_AUDIO_SELFTEST
 		ret = BrcmCreateAuddrv_selftestSysFs(card);
 		if (ret != 0)
-			aError("ALSA DriverProbe Error to create sysfs"
-			" for Auddrv selftest ret = %d\n", ret);
+			aError("DriverProbe sysfs err ret = %d\n", ret);
 #endif
 
 		return 0;
@@ -280,7 +292,7 @@ static int BCMAudLOG_open(struct inode *inode, struct file *file)
 }
 
 static int
-BCMAudLOG_read(struct file *file, char __user * buf, size_t count,
+BCMAudLOG_read(struct file *file, char __user *buf, size_t count,
 	       loff_t *ppos)
 {
 	int ret;
@@ -301,9 +313,9 @@ BCMAudLOG_read(struct file *file, char __user * buf, size_t count,
 			if (log_buffer_count >= count) {
 
 				if (log_buffer_end - log_read_ptr >= count) {
-				ret = copy_to_user(buf,
-						 log_read_ptr,
-						 count);
+					ret = copy_to_user(buf,
+							log_read_ptr,
+							count);
 					log_read_ptr += count;
 				} else {
 					unsigned char *pbuffer;
@@ -410,8 +422,9 @@ BCMAudLOG_write(struct file *file, const char __user *buf,
 		__func__, count - number);
 
 	count--;
+#ifdef CONFIG_BCM_MODEM
 	CSL_LOG_Write(buffer[0], logpoint_buffer_idx, &buffer[1], count);
-
+#endif
 	return count;
 }
 
@@ -433,14 +446,13 @@ static int BCMAudLOG_release(struct inode *inode, struct file *file)
 
 	if (audio_log_thread) {
 		/* kthread_stop(audio_log_thread); */
-		audio_log_cbinfo[0].capture_ready = 1;
 		aTrace(LOG_ALSA_INTERFACE,
 			"\n BCMLOG_release : waiting for kthread to stop %d\n",
 			dev_use_count);
 		kthread_stop(audio_log_thread);
 		aTrace(LOG_ALSA_INTERFACE,
 			"\n BCMLOG_release : kthread stopped %d\n",
-			dev_use_count);		
+			dev_use_count);
 		audio_log_thread = 0;
 		audio_log_cbinfo[0].capture_ready = 0;
 		audio_data_arrived = 0;
@@ -720,7 +732,7 @@ int logmsg_ready(struct snd_pcm_substream *substream, int log_point)
 
 					if ((AUD_LOG_PCMIN == log_point) ||
 						(AUD_LOG_PCMOUT == log_point)) {
-					p_read =
+						p_read =
 					    (void *)audio_log_cbinfo[i].
 					    p_LogRead;
 						p_read =
@@ -796,30 +808,33 @@ int process_logmsg(void *data)
 	struct BCMLOG_LogLinkList_t link_list[2];
 	unsigned short state;
 	unsigned short sender;
+	size_t period_size;
+	unsigned char *buffer_boundary;
 
 	while (1) {
 		wait_event_interruptible(audio_log_queue,
 					 audio_log_cbinfo[0].
-					 capture_ready | audio_log_cbinfo[1].
-					 capture_ready | audio_log_cbinfo[2].
-					 capture_ready | audio_log_cbinfo[3].
-					 capture_ready | kthread_should_stop());
+					 capture_ready || audio_log_cbinfo[1].
+					 capture_ready || audio_log_cbinfo[2].
+					 capture_ready || audio_log_cbinfo[3].
+					 capture_ready ||
+					 kthread_should_stop());
 
 		/* DEBUG("\n Capture thread running now\n"); */
-
 		if (dev_use_count == 0) {
-			aTrace(LOG_ALSA_INTERFACE,
-				"\n Stop process_logmsg thread\n");
 			if (kthread_should_stop())
 				aTrace(LOG_ALSA_INTERFACE,
 					"\n kthread_should_stop returns TRUE\n");
 			else
 				aTrace(LOG_ALSA_INTERFACE,
-					"\n kthread_should_stop returns FALSE\n");	
+					"\n kthread_should_stop returns FALSE\n");
+		}
+		if (kthread_should_stop()) {
+			aTrace(LOG_ALSA_INTERFACE,
+				"\n Stop process_logmsg thread\n");
 			audio_log_writecb.pPrivate = NULL;
 			break;
 		}
-
 		for (i = 0; i < LOG_STREAM_NUMBER; i++) {
 			if (audio_log_cbinfo[i].capture_ready) {
 				/* DEBUG("\n Capture stream at
@@ -858,6 +873,10 @@ int process_logmsg(void *data)
 					if (runtime == NULL)
 						goto this_path_done;
 
+					period_size = runtime->dma_bytes
+						/ runtime->periods;
+					buffer_boundary = runtime->dma_area
+						+ runtime->dma_bytes;
 					log_header.magicID = 0xA0D10106;
 					log_header.logPointID =
 					    audio_log_cbinfo[i].stream_index;
@@ -868,8 +887,7 @@ int process_logmsg(void *data)
 					log_header.bitsPerSample =
 					    runtime->sample_bits;
 					log_header.frame_size =
-					    runtime->dma_bytes / 2;
-
+						period_size;
 				link_list[0].byte_array = (void *)&log_header;
 				link_list[0].size = sizeof(log_header);
 
@@ -892,15 +910,11 @@ int process_logmsg(void *data)
 					p_dma_area =
 					    (void *)audio_log_cbinfo[i].
 					    p_LogRead;
-
-					if (p_dma_area == runtime->dma_area) {
-						p_dma_area =
-						    runtime->dma_area +
-						    runtime->dma_bytes / 2;
-
-					} else {
+					if (p_dma_area == NULL || p_dma_area ==
+						buffer_boundary - period_size)
 						p_dma_area = runtime->dma_area;
-					}
+					else
+						p_dma_area += period_size;
 
 					audio_log_cbinfo[i].p_LogRead =
 					    (void *)p_dma_area;
@@ -910,7 +924,7 @@ int process_logmsg(void *data)
 
 					link_list[1].byte_array = p_dma_area;
 					link_list[1].size =
-						runtime->dma_bytes / 2;
+						period_size;
 
 				if (log_point == AUD_LOG_VOCODER_UL)
 					mutex_unlock(&voip_log.voip_ul_mutex);
@@ -950,7 +964,7 @@ static struct platform_driver __refdata sgPlatformDriver = {
 	 * because of "section mismatch" warning.
 	 */
 	/*	.probe = DriverProbe, */
-	.remove = __devexit_p(DriverRemove),
+	.remove = DriverRemove,
 	.suspend = DriverSuspend,
 	.resume = DriverResume,
 	.driver = {
@@ -971,23 +985,49 @@ static const struct file_operations bcmlog_fops = {
 	.release = BCMAudLOG_release,
 };
 
+static void vibra_enable_set_timeout(struct timed_output_dev *sdev,
+	int timeout)
+{
+	BRCM_AUDIO_Param_Vibra_t parm_vibra;
+	
+	parm_vibra.strength = 100;   /* Strength*/
+	parm_vibra.direction = 0;     /* Direction*/
+	parm_vibra.duration = timeout; /* timeout_ms; */
+	if (timeout != 0) {
+		AUDIO_Ctrl_Trigger(ACTION_AUD_EnableByPassVibra,
+		&parm_vibra, NULL, 0);
+	} else {
+		AUDIO_Ctrl_Trigger(ACTION_AUD_DisableByPassVibra,
+		&parm_vibra, NULL, 0);
+	}
+	return;
+}
+
+static int vibra_get_remaining_time(struct timed_output_dev *sdev)
+{
+	return 0;
+}
+
 /**
  * ModuleInit: Module initialization
  *
 */
-static int __devinit ALSAModuleInit(void)
+static int ALSAModuleInit(void)
 {
 	int err = 0;
 
 	aTrace(LOG_ALSA_INTERFACE, "ALSA Module init called:\n");
+#ifndef JAVA_ZEBU_TEST
 	if (is_ap_only_boot()) {
 		/* don't register audio driver for AP only boot mode */
 		aTrace(LOG_ALSA_INTERFACE, "AP Only Boot\n");
 		return 0;
 	}
+#endif
 
 	sgPlatformDriver.probe = DriverProbe;
 	err = platform_driver_register(&sgPlatformDriver);
+
 	aTrace(LOG_ALSA_INTERFACE, "\n %lx:driver register done %d\n"
 			, jiffies, err);
 	if (err)
@@ -1017,19 +1057,21 @@ static int __devinit ALSAModuleInit(void)
  * ModuleExit: Module de-initialization
 *
 */
-static void __devexit ALSAModuleExit(void)
+static void ALSAModuleExit(void)
 {
 
 	aTrace(LOG_ALSA_INTERFACE, "\n %lx:ModuleExit\n", jiffies);
+#ifndef JAVA_ZEBU_TEST
 	if (is_ap_only_boot()) {
 		/* AP only boot mode - no need to de-register */
 		aTrace(LOG_ALSA_INTERFACE, "AP Only Boot\n");
 		return;
 	}
-
+#endif
 	snd_card_free(sgpCaph_chip->card);
 
 	platform_driver_unregister(&sgPlatformDriver);
+	timed_output_dev_unregister(&vibra_timed_dev);
 	TerminateAudioHalThread();
 
 	aTrace(LOG_ALSA_INTERFACE, "\n %lx:exit done\n", jiffies);

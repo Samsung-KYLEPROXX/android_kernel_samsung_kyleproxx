@@ -1,16 +1,16 @@
 /*
  * Copyright 2012 Broadcom Corporation
-*
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
  * published by the Free Software Foundation (the "GPL").
-*
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
-*
- * A copy of the GPL is available at 
+ *
+ * A copy of the GPL is available at
  * http://www.broadcom.com/licenses/GPLv2.php, or by writing to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
@@ -134,8 +134,7 @@ void chal_audio_vinpath_select_primary_mic( CHAL_HANDLE handle,  cUInt16 digital
  *
  * ============================================================================
  */
-void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 enable,
-					_Bool clock_phase_rev)
+void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 enable)
 {
     cUInt32 base =    ((ChalAudioCtrlBlk_t*)handle)->audioh_base;
     cUInt32 reg_val;
@@ -148,12 +147,7 @@ void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 enable,
 	BRCM_WRITE_REG(base, AUDIOH_ADCPATH_GLOBAL_CTRL, 0);
 
     reg_val = BRCM_READ_REG(base, AUDIOH_ADC_CTL);
-	reg_val &= ~(AUDIOH_ADC_CTL_DMIC1_EN_MASK |
-				 AUDIOH_ADC_CTL_DMIC2_EN_MASK |
-				 AUDIOH_ADC_CTL_DMIC_CLK_PHASE1_MASK);
-
-	if (clock_phase_rev)
-		reg_val |= AUDIOH_ADC_CTL_DMIC_CLK_PHASE1_MASK;
+    reg_val &= ~(AUDIOH_ADC_CTL_DMIC1_EN_MASK | AUDIOH_ADC_CTL_DMIC2_EN_MASK);
 
     if(enable&CHAL_AUDIO_CHANNEL_LEFT)
     {
@@ -253,7 +247,7 @@ void chal_audio_vinpath_int_enable(CHAL_HANDLE handle, cUInt16 thr_int_enable, c
     }
 
     /* Set the required setting */
-    BRCM_WRITE_REG(base,  AUDIOH_AUDIO_INTC, reg_val);
+    /* BRCM_WRITE_REG(base,  AUDIOH_AUDIO_INTC, reg_val); */
 
     return;
 }
@@ -299,7 +293,7 @@ void chal_audio_vinpath_left_int_enable(CHAL_HANDLE handle, cUInt16 thr_int_enab
     }
 
     /* Set the required setting */
-    BRCM_WRITE_REG(base,  AUDIOH_AUDIO_INTC, reg_val);
+    /* BRCM_WRITE_REG(base,  AUDIOH_AUDIO_INTC, reg_val); */
 
     return;
 }

@@ -1,16 +1,16 @@
 /*
  * Copyright 2012 Broadcom Corporation
-* 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
  * published by the Free Software Foundation (the "GPL").
-* 
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
-* 
- * A copy of the GPL is available at 
+ *
+ * A copy of the GPL is available at
  * http://www.broadcom.com/licenses/GPLv2.php, or by writing to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
@@ -298,8 +298,7 @@ extern void chal_audio_int_clear(CHAL_HANDLE handle, cUInt32 reg_val);
 *
 *  @return none
 *****************************************************************************/
-extern  void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle,
-			cUInt16 path, _Bool clock_phase_rev);
+extern  void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 path);
 
 
 /**
