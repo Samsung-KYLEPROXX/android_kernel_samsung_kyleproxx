@@ -43,10 +43,8 @@ struct spa_batt_status
         int health;
         int lp_charging;
         int charging_source;
-
-	
-		int ac_online;
-		int usb_online;
+        int ac_online;
+        int usb_online;
 };
 
 struct spa_ps
@@ -70,6 +68,7 @@ static enum power_supply_property spa_batt_props[] = {
         POWER_SUPPLY_PROP_BATT_TEMP_ADC,
         POWER_SUPPLY_PROP_HEALTH,
         POWER_SUPPLY_PROP_MODEL_NAME,
+        POWER_SUPPLY_PROP_LCD,
 };
 static enum power_supply_property spa_charger_props[] = {
         POWER_SUPPLY_PROP_ONLINE,
@@ -121,6 +120,10 @@ static int spa_batt_get_property( struct power_supply *batt, enum power_supply_p
 				case POWER_SUPPLY_PROP_BATT_TEMP_ADC:
 						propval->intval = spa_ps_iter->state.temp_adc;
 						break;
+
+				case POWER_SUPPLY_PROP_LCD:
+						break;
+						
 				default:
 						ret = -EINVAL;
 						break;
@@ -169,6 +172,9 @@ static int spa_batt_set_property( struct power_supply *batt, enum power_supply_p
 
 				case POWER_SUPPLY_PROP_BATT_TEMP_ADC:
 						spa_ps_iter->state.temp_adc = propval->intval;
+						break;
+
+				case POWER_SUPPLY_PROP_LCD:
 						break;
 
 				default:
@@ -316,7 +322,7 @@ __setup("lpcharge=",get_boot_mode);
 int spa_ps_init(struct platform_device *pdev)
 {
 	int ret=0;
-	
+
 	struct spa_ps *spa_ps;
 
 	printk("%s : spa_ps start\n", __func__);

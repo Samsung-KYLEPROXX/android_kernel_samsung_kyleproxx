@@ -61,6 +61,13 @@ struct bcmpmu_adc {
 	struct bcmpmu_adc_pdata *pdata;
 };
 
+static inline bool is_temp_channel(enum bcmpmu_adc_channel channel)
+{
+	return (channel == PMU_ADC_CHANN_32KTEMP) ||
+		(channel == PMU_ADC_CHANN_PATEMP) ||
+		(channel == PMU_ADC_CHANN_NTC);
+}
+
 static int return_index(const struct bcmpmu_adc_lut *slist,
 						int len, int element)
 {
@@ -81,19 +88,62 @@ static int return_index(const struct bcmpmu_adc_lut *slist,
 	else
 		return high;
 }
-/**
- * convert ADC @raw value to units
- * if PMU_ADC_FLAG_CONV_LUT (not look-up table) is not set ADC
- * conversion is done using Formula:
- * (raw / BCMPMU_ADC_RESOLUTION) * volt_range + offset
- *
- * If there is a lut, we will do linear interpolation to convert a value
- */
-static int bcmpmu_adc_convert(struct bcmpmu59xxx *bcmpmu,
+
+static int get_temp_to_raw(const struct bcmpmu_adc_lut *lut,
+		int len, int temperature)
+{
+	int raw;
+	int idx;
+
+	if (temperature >= lut[0].map)
+		raw = lut[0].raw;
+	else if (temperature <= lut[len - 1].map)
+		raw = lut[len - 1].raw;
+	else {
+		for (idx = 0; idx < len; idx++) {
+			if (temperature <= lut[idx].map  &&
+					temperature > lut[idx + 1].map)
+				break;
+		}
+		raw = INTERPOLATE_LINEAR(temperature,
+				lut[idx].map,
+				lut[idx].raw,
+				lut[idx + 1].map,
+				lut[idx + 1].raw);
+
+	}
+	return raw;
+}
+static int bcmpmu_adc_actual_to_raw(struct bcmpmu_adc *adc,
+		enum bcmpmu_adc_channel channel,
+		struct bcmpmu_adc_result *result)
+{
+	struct bcmpmu_adc_lut *lut;
+	int len = 0;
+
+	if (adc->pdata[channel].lut && is_temp_channel(channel)) {
+		len = adc->pdata[channel].lut_len;
+		lut = adc->pdata[channel].lut;
+		result->raw = get_temp_to_raw(lut, len, result->conv);
+	} else if (adc->pdata[channel].lut && !is_temp_channel(channel)) {
+		pr_hwmon(ERROR, "%s: not implemented\n", __func__);
+		result->raw = 0;
+	} else if (channel != PMU_ADC_CHANN_DIE_TEMP)
+		result->raw =
+			(((result->conv  - adc->pdata[channel].adc_offset) *
+				BCMPMU_ADC_RESOLUTION) /
+			 adc->pdata[channel].volt_range);
+	else
+		result->raw = (((result->conv * 100) + (KELVIN_CONST * 1000)) /
+			PMU_TEMP_MULTI_CONST);
+	return 0;
+}
+
+static int bcmpmu_adc_raw_to_actual(struct bcmpmu_adc *adc,
 				enum bcmpmu_adc_channel channel,
 					struct bcmpmu_adc_result *result)
+
 {
-	struct bcmpmu_adc *adc = (struct bcmpmu_adc *)bcmpmu->adc;
 	struct bcmpmu_adc_lut *lut;
 	int index = 0;
 	int len = 0;
@@ -124,16 +174,45 @@ static int bcmpmu_adc_convert(struct bcmpmu59xxx *bcmpmu,
 					BCMPMU_ADC_RESOLUTION +
 					(adc->pdata[channel].adc_offset);
 	} else {
-		/* temp = raw * 0.497 - 275.7 */
-		result->conv =
-				((result->raw * PMU_TEMP_MULTI_CONST) / 1000)
-								- KELVIN_CONST;
+		/* temp = raw * 0.497 - 275.7 C
+		 * But for better precision below formulae
+		 * gives the result in 10th multiple of Centigrade*/
+		result->conv = ((result->raw * PMU_TEMP_MULTI_CONST) -
+					(KELVIN_CONST * 1000)) / 100;
 	}
 
 	pr_hwmon(FLOW, "%s channel:%d raw = %x conv_formula = %d\n",
 			__func__, channel, result->raw, result->conv);
 	return 0;
 }
+
+/**
+ * convert ADC @raw value to units
+ * if PMU_ADC_FLAG_CONV_LUT (not look-up table) is not set ADC
+ * conversion is done using Formula:
+ * (raw / BCMPMU_ADC_RESOLUTION) * volt_range + offset
+ *
+ * If there is a lut, we will do linear interpolation to convert a value
+ */
+int bcmpmu_adc_convert(struct bcmpmu59xxx *bcmpmu,
+		enum bcmpmu_adc_channel channel,
+		struct bcmpmu_adc_result *result,
+		bool to_raw)
+{
+	struct bcmpmu_adc *adc = (struct bcmpmu_adc *)bcmpmu->adc;
+	int ret;
+
+	BUG_ON(!adc);
+
+	if (to_raw)
+		ret = bcmpmu_adc_actual_to_raw(adc, channel,
+				result);
+	else
+		ret = bcmpmu_adc_raw_to_actual(adc, channel,
+				result);
+	return ret;
+}
+
 /**
  * Read RTM ADC from PMU.
  * Return: 0 on SUCCESS
@@ -273,7 +352,8 @@ int read_sar_adc(struct bcmpmu59xxx *bcmpmu, enum bcmpmu_adc_channel channel,
 		mutex_unlock(&adc->chann_mutex[PMU_ADC_CHANN_BOM]);
 		break;
 
-#if defined(CONFIG_MACH_HAWAII_SS_COMMON)
+#if defined(CONFIG_MACH_HAWAII_SS_COMMON) || defined(CONFIG_MACH_JAVA_SS_COMMON)
+
 	/* Logan R01 and future */
 	case PMU_ADC_CHANN_NTC:
 		mutex_lock(&adc->chann_mutex[PMU_ADC_CHANN_NTC]);
@@ -403,7 +483,7 @@ int bcmpmu_adc_read(struct bcmpmu59xxx *bcmpmu, enum bcmpmu_adc_channel channel,
 			return -EAGAIN;
 	}
 
-	bcmpmu_adc_convert(bcmpmu, channel, result);
+	bcmpmu_adc_convert(bcmpmu, channel, result, 0);
 
 	return 0;
 }
@@ -510,7 +590,7 @@ static void bcmpmu_adc_debug_init(struct bcmpmu59xxx *bcmpmu)
 
 	if (!debugfs_create_u32("dbg_mask", S_IWUSR | S_IRUSR,
 				debugfs_adc_dir, &debug_mask))
-		goto err ;
+		goto err;
 
 	return;
 err:
@@ -520,7 +600,7 @@ err:
 #endif
 static int __devexit bcmpmu_adc_remove(struct platform_device *pdev)
 {
-	hwmon_device_register(&pdev->dev);
+	hwmon_device_unregister(&pdev->dev);
 	sysfs_remove_group(&pdev->dev.kobj, &bcmpmu_hwmon_attr_group);
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove(debugfs_adc_dir);
@@ -535,7 +615,7 @@ static int __devinit bcmpmu_adc_probe(struct platform_device *pdev)
 	struct bcmpmu_adc	*adc;
 	int i, ret = 0;
 
-	printk(KERN_DEBUG "%s: called\n", __func__);
+	pr_info("%s: called\n", __func__);
 
 	gbcmpmu = bcmpmu;
 	adc = kzalloc(sizeof(struct bcmpmu_adc), GFP_KERNEL);

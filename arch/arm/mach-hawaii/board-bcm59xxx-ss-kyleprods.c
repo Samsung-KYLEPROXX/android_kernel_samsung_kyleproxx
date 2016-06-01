@@ -1058,7 +1058,7 @@ struct bcmpmu_acld_pdata acld_pdata = {
 						for chrgr while using ACLD */
 	.i_def_dcp = 700,
 	.i_max_cc = 2200,
-	.acld_cc_lmt = 760,
+	.acld_cc_lmt = 900,
 	.otp_cc_trim = 0x1F,
 };
 
@@ -1122,9 +1122,9 @@ static struct batt_cutoff_cap_map ss_kyleprods_cutoff_cap_lut[] = {
 
 #if defined(CONFIG_BCMPMU_THERMAL_THROTTLE)
 static struct batt_temp_curr_map ys_05_temp_curr_lut[] = {
-                         {51, 510},
-                         {54, 400},
-//                      {54,  0},
+		{400, 510},
+		{500, 270},
+		{580,  0},
 };
 #endif
 
@@ -1267,12 +1267,13 @@ static struct bcmpmu_fg_pdata fg_pdata = {
 	/* enable HW EOC of PMU */
 	.hw_maintenance_charging = false,
 	/* floor during sleep from Hawaii HW workshop Dec7 2012 */
-	.sleep_current_ua = 1460,
+	.sleep_current_ua = 1480,
 	.sleep_sample_rate = 32000,
 	.fg_factor = 964, /* KyleProDS */
 
 	.poll_rate_low_batt =  120000, /* every 120 seconds */
 	.poll_rate_crit_batt = 5000, /* every 5 Seconds */
+	.ntc_high_temp = 680, /*battery too hot shdwn temp*/
 };
 
 struct bcmpmu59xxx_accy_pdata accy_pdata = {
@@ -1297,8 +1298,6 @@ static struct bcmpmu_throttle_pdata throttle_pdata = {
 	.temp_adc_channel = PMU_ADC_CHANN_DIE_TEMP,
 	.temp_adc_req_mode = PMU_ADC_REQ_SAR_MODE,
 	/* Registers to store/restore while throttling*/
-	.throttle_backup_reg = chrgr_backup_registers,
-	.throttle_backup_reg_sz = ARRAY_SIZE(chrgr_backup_registers),
 	.throttle_poll_time = THROTTLE_WORK_POLL_TIME,
 	.hysteresis_temp = HYSTERESIS_DEFAULT_TEMP,
 };
@@ -1320,16 +1319,16 @@ struct spa_power_data spa_data = {
 	.recovery_temp_cold = 25,
 
 #if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
-	.eoc_current = 160,
-	.backcharging_time = 30, //mins
-	.recharging_eoc = 70,
+	.eoc_current = 150,
+	.backcharging_time = 45, //mins
+	.recharging_eoc = 99,
 #else
 	.eoc_current = 100,
 #endif
 	.recharge_voltage = 4300,
-	.charging_cur_usb = 511,
-	.charging_cur_cdp_usb = 651,
-	.charging_cur_wall = 651,
+	.charging_cur_usb = 510,
+	.charging_cur_cdp_usb = 695,
+	.charging_cur_wall = 695,
 	.charge_timer_limit = CHARGE_TIMER_6HOUR,
 };
 

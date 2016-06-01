@@ -159,10 +159,12 @@ struct bcmpmu_fg_pdata {
 	bool hw_maintenance_charging;
 	int poll_rate_low_batt;
 	int poll_rate_crit_batt;
+	int ntc_high_temp;
 };
 int bcmpmu_fg_set_sw_eoc_current(struct bcmpmu59xxx *bcmpmu, int eoc_current);
 int bcmpmu_fg_calibrate_battery(struct bcmpmu59xxx *bcmpmu);
 int bcmpmu_fg_get_current_capacity(struct bcmpmu59xxx *bcmpmu);
+int bcmpmu_fg_get_current_currentavg(struct bcmpmu59xxx *bcmpmu);
 int bcmpmu_fg_get_batt_volt(struct bcmpmu59xxx *bcmpmu);
 int bcmpmu_fg_get_avg_volt(struct bcmpmu59xxx *bcmpmu);
 int bcmpmu_fg_get_batt_curr(struct bcmpmu59xxx *bcmpmu, int *curr);

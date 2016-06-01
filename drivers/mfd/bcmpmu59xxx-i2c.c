@@ -98,6 +98,11 @@ static void bcmpmu_i2c_log(u32 *buf_v, char rdwr, u8 slave, u8 reg, u8 val)
 
 static inline void bcmpmu_i2c_lock(struct bcmpmu59xxx *bcmpmu)
 {
+	/**
+	 * This mechanism creates a problem in 3.10 kernel
+	 * during suspend (dpm sees this a active wakeup source)
+	 * Disable this for time being
+	 */
 #ifdef CONFIG_HAS_WAKELOCK
 	/*Any thread can lock/unlock a wake lock.
 	   Since PMU I2C APIs can be invoked from mutiple threads,
@@ -128,16 +133,6 @@ static inline void bcmpmu_i2c_unlock(struct bcmpmu59xxx *bcmpmu)
 #if defined(CONFIG_MFD_BCM_PWRMGR_SW_SEQUENCER)
 
 int last_trans = I2C_TRANS_NONE;
-
-static inline u8 bcmpmu_get_slaveid(struct bcmpmu59xxx *bcmpmu, u32 reg)
-{
-	u8 map = DEC_MAP_ADD(reg);
-
-	if (map)
-		return bcmpmu->pdata->i2c_companion_info[map - 1].addr;
-	else
-		return bcmpmu->pmu_bus->i2c->addr;
-}
 
 static int bcmpmu_i2c_try_write(struct bcmpmu59xxx *bcmpmu, u32 reg, u8 value)
 {

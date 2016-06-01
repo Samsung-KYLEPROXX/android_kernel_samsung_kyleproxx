@@ -32,12 +32,14 @@
 #include <linux/wait.h>
 #include <linux/input.h>
 #include <linux/sysfs.h>
+#include <linux/wakelock.h>
 #include <linux/mfd/bcmpmu59xxx.h>
 #include <linux/mfd/bcmpmu59xxx_reg.h>
 
 struct bcmpmu_ponkey {
 	struct input_dev *idev;
 	struct bcmpmu59xxx *bcmpmu;
+	struct wake_lock wake_lock;
 	u32 ponkey_state;/*0: Released, 1 : Pressed */
 	u32 ponkey_mode;
 };
@@ -142,16 +144,18 @@ static int param_set_simulate_ponkey(const char *val,
 		return -EINVAL;
 	/* coverity[secure_coding] */
 	ret = sscanf(val, "%d", &trig);
-	pr_info("%s, trig:%d\n", __func__, trig);
 
 	if (bcmpmu_pkey) {
-		if (trig)
-			bcmpmu_pkey->ponkey_state = 1;
-		else
-			bcmpmu_pkey->ponkey_state = 0;
-		pr_info("ponkeystate:%d", bcmpmu_pkey->ponkey_state);
+		bcmpmu_pkey->ponkey_state = 1;
+		pr_info("%s: state:%d", __func__, bcmpmu_pkey->ponkey_state);
 		input_report_key(bcmpmu_pkey->idev,
-			KEY_POWER, bcmpmu_pkey->ponkey_state);
+				KEY_POWER, bcmpmu_pkey->ponkey_state);
+		input_sync(bcmpmu_pkey->idev);
+
+		bcmpmu_pkey->ponkey_state = 0;
+		pr_info("%s: state:%d", __func__, bcmpmu_pkey->ponkey_state);
+		input_report_key(bcmpmu_pkey->idev,
+				KEY_POWER, bcmpmu_pkey->ponkey_state);
 		input_sync(bcmpmu_pkey->idev);
 	} else
 		pr_info("Ponkey ptr is NULL\n");
@@ -177,6 +181,8 @@ static void bcmpmu_ponkey_isr(u32 irq, void *data)
 
 	switch (irq) {
 	case PMU_IRQ_POK_PRESSED:
+		if (!wake_lock_active(&bcmpmu_pkey->wake_lock))
+			wake_lock_timeout(&bcmpmu_pkey->wake_lock, HZ);
 		ponkey->ponkey_state = 1;
 		break;
 
@@ -311,39 +317,63 @@ static int __devinit bcmpmu59xxx_ponkey_probe(struct platform_device *pdev)
 	/*Disable all smart timer features by default
 	__ponkey_init_timer_func function will enable it as needed*/
 #if 0
-	if (bcmpmu->read_dev(bcmpmu, PMU_REG_PONKEYCTRL4, &val))
-		return -EINVAL;
+	if (bcmpmu->read_dev(bcmpmu, PMU_REG_PONKEYCTRL4, &val)) {
+		error = -EINVAL;
+		goto out_input;
+	}
 	val &= ~(PONKEYCTRL4_POK_RESTART_EN_MASK |
 				PONKEYCTRL4_POK_WAKUP_DEB_MASK);
 	val |= PONKEYCTRL4_KEY_PAD_LOCK_MASK;
 	val |= (pkey->wakeup_deb << PONKEYCTRL4_POK_WAKUP_DEB_SHIFT) &
 			PONKEYCTRL4_POK_WAKUP_DEB_MASK;
-	if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL4, val))
-		return -EINVAL;
+	if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL4, val)) {
+		error =  -EINVAL;
+		goto out_input;
+	}
 	/*Clear smart reset feature bits in PMU_REG_PONKEYCTRL6*/
 	pr_info("%s: smart rest status: %x\n", __func__, val);
-	if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL6, 0))
-		return -EINVAL;
+	if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL6, 0)) {
+		error = -EINVAL;
+		goto out_input;
+	}
 #endif
 
 	val = (pkey->press_deb << PONKEYCTRL1_PRESS_DEB_SHIFT) &
 			PONKEYCTRL1_PRESS_DEB_MASK;
 	val |= (pkey->release_deb << PONKEYCTRL1_RELEASE_DEB_SHIFT) &
 			PONKEYCTRL1_RELEASE_DEB_MASK;
-        if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL1, val)) {
-	      error =  -EINVAL;
-              goto out;
-           }
+	if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL1, val)) {
+		error = -EINVAL;
+		goto out_input;
+	}
 
-#if 0
-	if (__ponkey_init_timer_func(bcmpmu, PKEY_TIMER_T1, pkey->t1))
-		return -EINVAL;
-	if (__ponkey_init_timer_func(bcmpmu, PKEY_TIMER_T2, pkey->t2))
-		return -EINVAL;
-	if (__ponkey_init_timer_func(bcmpmu, PKEY_TIMER_T3, pkey->t3))
-		return -EINVAL;
+#ifdef CONFIG_DISABLE_PON_RESTART
+	if (bcmpmu->read_dev(bcmpmu, PMU_REG_PONKEYCTRL4, &val))
+			return -EINVAL;
+
+			val &= ~(PONKEYCTRL4_POK_RESTART_EN_MASK);
+
+	if (bcmpmu->write_dev(bcmpmu, PMU_REG_PONKEYCTRL4, val))
+			return -EINVAL;
 #endif
 
+#if 0
+	if (__ponkey_init_timer_func(bcmpmu, PKEY_TIMER_T1, pkey->t1)) {
+		error = -EINVAL;
+		goto out_input;
+	}
+	if (__ponkey_init_timer_func(bcmpmu, PKEY_TIMER_T2, pkey->t2)) {
+		error =  -EINVAL;
+		goto out_input;
+	}
+	if (__ponkey_init_timer_func(bcmpmu, PKEY_TIMER_T3, pkey->t3)) {
+		error =  -EINVAL;
+		goto out_input;
+	}
+#endif
+
+	wake_lock_init(&bcmpmu_pkey->wake_lock,
+			WAKE_LOCK_SUSPEND, "PONKEY_press");
 
 	/* Request PRESSED and RELEASED interrupts.
 	 */
@@ -363,8 +393,10 @@ static int __devinit bcmpmu59xxx_ponkey_probe(struct platform_device *pdev)
 		goto out;
 	}
 	ponkey_kobj = kobject_create_and_add("ponkey", NULL);
-	if (!ponkey_kobj)
+	if (!ponkey_kobj) {
+		error = -EINVAL;
 		goto err;
+	}
 	error = sysfs_create_group(ponkey_kobj, &ponkey_mode_attr_group);
 	if (error) {
 		dev_err(bcmpmu->dev, "failed to create attribute group: %d\n",
@@ -389,7 +421,7 @@ static int __devexit bcmpmu59xxx_ponkey_remove(struct platform_device *pdev)
 	struct bcmpmu_ponkey *ponkey = bcmpmu->ponkeyinfo;
 
 	sysfs_remove_group(ponkey_kobj, &ponkey_mode_attr_group);
-
+	wake_lock_destroy(&bcmpmu_pkey->wake_lock);
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_POK_PRESSED);
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_POK_RELEASED);
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_POK_T1);

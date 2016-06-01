@@ -36,28 +36,6 @@
 #include <linux/seq_file.h>
 #endif
 
-#ifdef CONFIG_MACH_HAWAII_SS_CS02
-#include <mach/chip_pinmux.h>
-#include <mach/pinmux.h>
-#include <linux/gpio.h>
-
-#define CS02_HW_REV			124
-static struct pin_config gpin_gpio124_config[2] = {
-	{
-	// set GPIO124/Input/Pulldown
-		.name = PN_DMIC0DQ,
-		.func = PF_GPIO124,
-		.reg.val = 0x443,
-	},
-	{
-	// set GPIO124/Input/No Pull
-		.name = PN_DMIC0DQ,
-		.func = PF_GPIO124,
-		.reg.val = 0x403,
-	},
-};
-#endif
-
 static struct bcmpmu59xxx *bcmpmu_gbl;
 static struct mfd_cell  irq_devs[] = {
 	{
@@ -268,19 +246,27 @@ EXPORT_SYMBOL(bcmpmu_reg_write_unlock);
 
 void bcmpmu_client_power_off(void)
 {
+	u8 val = 0;
 	BUG_ON(!bcmpmu_gbl);
+	preempt_disable();
+	local_irq_disable();
+	pwr_mgr_pmu_reg_read_direct((u8) DEC_REG_ADD(PMU_REG_WRPROEN),
+				bcmpmu_get_slaveid(bcmpmu_gbl,
+					PMU_REG_WRPROEN),
+				&val);
+	if (!(val & (WRPROEN_DIS_WR_PRO | WRPROEN_PMU_UNLOCK)))
+		pwr_mgr_pmu_reg_write_direct((u8)
+					DEC_REG_ADD(PMU_REG_WRLOCKKEY),
+					bcmpmu_get_slaveid(bcmpmu_gbl,
+						PMU_REG_WRLOCKKEY),
+					WRLOCKKEY_VAL);
 
-#ifdef CONFIG_MFD_BCM_PWRMGR_SW_SEQUENCER
-	pwr_mgr_set_i2c_mode(PWR_MGR_I2C_MODE_POLL);
-#endif
-	bcmpmu_reg_write_unlock(bcmpmu_gbl);
-	bcmpmu_gbl->write_dev(bcmpmu_gbl, PMU_REG_HOSTCTRL1,
+	pwr_mgr_pmu_reg_write_direct((u8) DEC_REG_ADD(PMU_REG_HOSTCTRL1),
+					bcmpmu_get_slaveid(bcmpmu_gbl,
+						PMU_REG_HOSTCTRL1),
 			HOSTCTRL1_SW_SHDWN);
-
-#ifdef CONFIG_MFD_BCM_PWRMGR_SW_SEQUENCER
-	pwr_mgr_set_i2c_mode(PWR_MGR_I2C_MODE_IRQ);
-#endif
-
+	local_irq_enable();
+	preempt_enable();
 }
 EXPORT_SYMBOL(bcmpmu_client_power_off);
 
@@ -688,6 +674,7 @@ static void bcmpmu59xxx_shutdown(struct platform_device *pdev)
 static int __devinit bcmpmu59xxx_probe(struct platform_device *pdev)
 {
 	int ret = 0, size, i;
+	u8 val;
 	struct bcmpmu59xxx *bcmpmu = pdev->dev.platform_data;
 	struct bcmpmu59xxx_platform_data *pdata = bcmpmu->pdata;
 	struct mfd_cell *pmucells ;
@@ -710,8 +697,11 @@ static int __devinit bcmpmu59xxx_probe(struct platform_device *pdev)
 	/*Copy flags from pdata*/
 	bcmpmu->flags = bcmpmu->pdata->flags;
 
+#ifdef CONFIG_MACH_HAWAII_SS_COMMON
+	bcmpmu->flags &= ~BCMPMU_ACLD_EN;
+#endif
+
 	/* Check ACLD for A1 PMU */
-#if 0
 	if (bcmpmu->rev_info.prj_id == BCMPMU_59054_ID) {
 		if (bcmpmu->rev_info.ana_rev >= BCMPMU_59054A1_ANA_REV) {
 			if (bcmpmu->flags & BCMPMU_ACLD_EN)
@@ -727,21 +717,19 @@ static int __devinit bcmpmu59xxx_probe(struct platform_device *pdev)
 		}
 	}
 	pr_pmucore(INIT, "bcmpmu->flags = 0x%x\n", bcmpmu->flags);
-#endif
 
-#ifdef CONFIG_MACH_HAWAII_SS_CS02
-		// read HW revision thru GPIO124 and then set PAD to Input/No-pull to reduce current consumption 
-		// since External Pull-up register is connected to GPIO124 on HW Rev02 
-		pinmux_set_pin_config(&gpin_gpio124_config[0]);
-
-		gpio_request(CS02_HW_REV, "cs02_hw_revision");
-		gpio_direction_input(CS02_HW_REV);
-
-		bcmpmu->batt_temp_adc = gpio_get_value(CS02_HW_REV)?1:0;
-		pr_pmucore(INIT, " <%s> HW rev is %d\n", __func__, bcmpmu->batt_temp_adc);		
-		
-		gpio_free(CS02_HW_REV);
-		pinmux_set_pin_config(&gpin_gpio124_config[1]);	
+#ifdef CONFIG_MACH_HAWAII_SS_COMMON
+	bcmpmu->read_dev(bcmpmu, PMU_REG_OTG_BOOSTCTRL3, &val);
+	pr_pmucore(INIT, "+++PMU_REG_OTG_BOOSTCTRL3 = 0x%x\n", val);
+	if (bcmpmu->flags & BCMPMU_ACLD_EN) {
+		val |= ACLD_ENABLE_MASK;	// Enable MBC_TURBO bit
+		pr_pmucore(INIT, "MBC regulate input side VBUS\n");
+	} else {
+		val &= ~ACLD_ENABLE_MASK;	// Disable MBC_TURBO bit
+		pr_pmucore(INIT, "MBC regulate output side VMBAT\n");
+	}
+	bcmpmu->write_dev(bcmpmu, PMU_REG_OTG_BOOSTCTRL3, val);
+	pr_pmucore(INIT, "---PMU_REG_OTG_BOOSTCTRL3 = 0x%x\n", val);
 #endif
 
 	bcmpmu_gbl = bcmpmu;

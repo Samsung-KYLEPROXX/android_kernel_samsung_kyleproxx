@@ -28,6 +28,9 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/machine.h>
 #include <linux/i2c-kona.h>
+#include <linux/sort.h>
+#include <linux/reboot.h>
+#include <linux/mfd/bcmpmu59xxx_reg.h>
 
 #define BCMPMU_DUMMY_CLIENTS 1
 #define REG_READ_COUNT_MAX	20
@@ -336,6 +339,7 @@ enum bcmpmu_adc_channel {
 };
 
 enum bcmpmu_adc_req {
+	PMU_ADC_REQ_NO_FORCE_MODE,
 	PMU_ADC_REQ_SAR_MODE,
 	PMU_ADC_REQ_RTM_MODE,
 };
@@ -349,13 +353,13 @@ enum bcmpmu_adc_flag {
  * conv : converted value
  */
 struct bcmpmu_adc_result {
-	unsigned int raw;
+	int raw;
 	int conv;
 };
 
 struct bcmpmu_adc_lut {
-	unsigned int raw;
-	unsigned int map; /* temp, volt, etc map value in table */
+	int raw;
+	int map; /* temp, volt, etc map value in table */
 };
 
 /**
@@ -400,12 +404,15 @@ struct bcmpmu_acld_pdata {
 	int acld_vbus_margin;
 	int acld_vbus_thrs;
 	int acld_vbat_thrs;
+	int usbrm_vbus_thrs;
 	int i_sat;
 	int i_def_dcp; /* Default DCP current */
 	int i_max_cc;
 	int acld_cc_lmt;
 	int otp_cc_trim;
 	int one_c_rate;
+	int *acld_chrgrs;
+	int acld_chrgrs_list_size;
 	bool qa_required; /* Set this to true if
 			     Ibus is strictly limited to acld_cc_lmt */
 };
@@ -568,8 +575,9 @@ enum bcmpmu_event_t {
 	PMU_CHRGR_EVT_EOC,
 	PMU_CHRGR_EVT_CHRG_STATUS,
 	PMU_ACLD_EVT_ACLD_STATUS,
+	PMU_THEMAL_THROTTLE_STATUS,
 	PMU_FG_EVT_CAPACITY,
-	PMU_FG_EVT_FGC,
+	PMU_FG_EVT_EOC,
 	PMU_JIG_EVT_USB,
 	PMU_JIG_EVT_UART,
 	PMU_EVENT_MAX,
@@ -587,6 +595,14 @@ enum bcmpmu_usb_ctrl_t {
 	BCMPMU_USB_CTRL_SET_ADP_PRB_MOD,
 	BCMPMU_USB_CTRL_SET_ADP_PRB_CYC_TIME,
 	BCMPMU_USB_CTRL_SET_ADP_COMP_METHOD,
+	BCMPMU_USB_CTRL_SET_NTCHT_RISE,
+	BCMPMU_USB_CTRL_SET_NTCHT_FALL,
+	BCMPMU_USB_CTRL_SET_NTCCT_RISE,
+	BCMPMU_USB_CTRL_SET_NTCCT_FALL,
+	BCMPMU_USB_CTRL_GET_NTCHT_RISE,
+	BCMPMU_USB_CTRL_GET_NTCHT_FALL,
+	BCMPMU_USB_CTRL_GET_NTCCT_RISE,
+	BCMPMU_USB_CTRL_GET_NTCCT_FALL,
 	BCMPMU_USB_CTRL_GET_ADP_CHANGE_STATUS,
 	BCMPMU_USB_CTRL_GET_ADP_SENSE_TIMER_VALUE,
 	BCMPMU_USB_CTRL_GET_ADP_SENSE_STATUS,
@@ -602,6 +618,7 @@ enum bcmpmu_usb_ctrl_t {
 	BCMPMU_USB_CTRL_SW_UP,
 	BCMPMU_USB_CTRL_TPROBE_MAX,
 	BCMPMU_USB_CTRL_ALLOW_BC_DETECT,
+	BCMPMU_USB_OTG_SESSION,
 };
 
 struct bcmpmu59xxx_rw_data {
@@ -760,6 +777,18 @@ enum {
 	PKEY_RESTART_DLY_MAX
 };
 
+#define TIME_3HR	(3)
+
+enum {
+	TCH_HW_TIMER_3HR,
+	TCH_HW_TIMER_4HR,
+	TCH_HW_TIMER_5HR,
+	TCH_HW_TIMER_6HR,
+	TCH_HW_TIMER_7HR,
+	TCH_HW_TIMER_8HR,
+	TCH_HW_TIMER_9HR,
+	TCH_HW_TIMER_MAX,
+};
 
 /*PONKEY T1/T2/T3 action config*/
 struct pkey_timer_act {
@@ -825,9 +854,25 @@ struct bcmpmu59xxx_accy_pdata {
 	int qos_pi_id;
 };
 
+/* charger pdata data flags */
+enum {
+	/**
+	 * support for extented TCH timer feature
+	 */
+	BCMPMU_CHRGR_TCH_EXT_TIMER = 0x1 << 0,
+};
+
+/**
+ * @tch_base : TCH timer base to use (see enum TCH_HW_TIMER_XX)
+ * @tch_multiplier : mutliplier to use with @tch_base
+ */
 struct bcmpmu_chrgr_pdata {
 	int *chrgr_curr_lmt_tbl;
+	unsigned int flags;
+	unsigned int tch_base;
+	unsigned int tch_multiplier;
 };
+
 #if defined(CONFIG_LEDS_BCM_PMU59xxx)
 struct bcmpmu59xxx_led_pdata {
 	char *led_name;
@@ -863,6 +908,7 @@ struct bcmpmu59xxx_platform_data {
 	int piggyback_chrg;
 	char *piggyback_chrg_name;
 	int board_id;
+	int force_adc_mode;
 };
 
 struct bcmpmu59xxx {
@@ -881,9 +927,6 @@ struct bcmpmu59xxx {
 	void *acld;
 	void *spa_pb_info;
 	u32 flags; /*ctrl flags - copied from pdata*/
-#ifdef CONFIG_MACH_HAWAII_SS_CS02
-	u32 batt_temp_adc;
-#endif	
 	/* event notifier */
 	struct event_notifier event[PMU_EVENT_MAX];
 #ifdef CONFIG_DEBUG_FS
@@ -906,6 +949,51 @@ struct bcmpmu59xxx {
 	int (*mask_irq) (struct bcmpmu59xxx *bcmpmu, u32 irq);
 	int (*unmask_irq) (struct bcmpmu59xxx *bcmpmu, u32 irq);
 };
+
+static inline int cmp(const void *a, const void *b)
+{
+	if (*((int *)a) < *((int *)b))
+		return -1;
+	if (*((int *)a) > *((int *)b))
+		return 1;
+	return 0;
+}
+
+static inline int average(int *data, int samples)
+{
+	int i;
+	int sum = 0;
+
+	for (i = 0; i < samples; i++)
+		sum += data[i];
+
+	return sum/i;
+}
+
+/**
+ * calculates interquartile mean of the integer data set @data
+ * @size is the number of samples. It is assumed that
+ * @size is divisible by 4 to ease the calculations
+ */
+
+static inline int interquartile_mean(int *data, int num)
+{
+	int i, j;
+	int avg = 0;
+
+	sort(data, num, sizeof(int), cmp, NULL);
+
+	i = num / 4;
+	j = num - i;
+
+	for ( ; i < j; i++)
+		avg += data[i];
+
+	avg = avg / (j - (num / 4));
+
+	return avg;
+}
+
 
 int bcmpmu_get_pmu_mfd_cell(struct mfd_cell **);
 
@@ -933,6 +1021,7 @@ int bcmpmu_usb_set(struct bcmpmu59xxx *bcmpmu,
 			int ctrl, unsigned long data);
 int bcmpmu_check_vbus(void);
 int bcmpmu_accy_chrgr_type_notify(int chrgr_type);
+int bcmpmu_accy_id_change_notify(uint8_t id);
 u32 bcmpmu_get_chrgr_curr_lmt(u32 chrgr_type);
 int bcmpmu_chrgr_usb_en(struct bcmpmu59xxx *bcmpmu, int enable);
 bool bcmpmu_is_usb_host_enabled(struct bcmpmu59xxx *bcmpmu);
@@ -946,12 +1035,20 @@ int bcmpmu_cc_trim_up(struct bcmpmu59xxx *bcmpmu);
 int bcmpmu_cc_trim_down(struct bcmpmu59xxx *bcmpmu);
 bool bcmpmu_get_mbc_faults(struct bcmpmu59xxx *bcmpmu);
 int  bcmpmu_get_trim_curr(struct bcmpmu59xxx *bcmpmu);
+int bcmpmu_set_chrgr_def_current(struct bcmpmu59xxx *bcmpmu);
 
 bool bcmpmu_is_acld_enabled(struct bcmpmu59xxx *bcmpmu);
-
+bool bcmpmu_is_acld_supported(struct bcmpmu59xxx *bcmpmu,
+		enum bcmpmu_chrgr_type_t chrgr_type);
+bool bcmpmu_acld_false_usbrm(struct bcmpmu59xxx *bcmpmu);
 /* ADC */
 int bcmpmu_adc_read(struct bcmpmu59xxx *bcmpmu, enum bcmpmu_adc_channel channel,
 		enum bcmpmu_adc_req req, struct bcmpmu_adc_result *result);
+int bcmpmu_adc_convert(struct bcmpmu59xxx *bcmpmu,
+		enum bcmpmu_adc_channel channel,
+		struct bcmpmu_adc_result *result,
+		bool to_raw);
+
 int *bcmpmu59xxx_get_trim_table(struct bcmpmu59xxx *bcmpmu);
 int bcmpmu59xxx_rgltr_info_init(struct bcmpmu59xxx *bcmpmu);
 
@@ -974,6 +1071,17 @@ static inline int bcmpmu_post_spa_event(struct bcmpmu59xxx *bcmpmu,
 #endif /*CONFIG_CHARGER_BCMPMU_SPA*/
 #ifdef CONFIG_DEBUG_FS
 int bcmpmu_debugfs_open(struct inode *inode, struct file *file);
+#endif
+
+#if defined(CONFIG_MFD_BCM_PWRMGR_SW_SEQUENCER)
+static inline u8 bcmpmu_get_slaveid(struct bcmpmu59xxx *bcmpmu, u32 reg)
+{
+	u8 map = DEC_MAP_ADD(reg);
+	if (map)
+		return bcmpmu->pdata->i2c_companion_info[map - 1].addr;
+	else
+		return bcmpmu->pmu_bus->i2c->addr;
+}
 #endif
 
 #endif

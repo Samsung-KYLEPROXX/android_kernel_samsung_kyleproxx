@@ -15,7 +15,17 @@
 */
 #ifndef __SPA_POWER_H
 #define __SPA_POWER_H
-// +++ for header files
+/* +++ for header files */
+
+#define SPA_DEBUG_FEATURE
+/*#define SPA_DEBUG_INTERNAL_LOG*/
+/*#define SPA_TEMPERATURE_INT*/
+#define USE_AVIOD_ABSORBING_SHOCK
+#define CONFIG_SEC_BATT_EXT_ATTRS
+#define SPA_FAKE_FULL_CAPACITY
+#ifdef CONFIG_SEC_THERMISTOR
+#define SPA_SIOP_ENABLE
+#endif
 
 typedef enum
 {
@@ -38,8 +48,12 @@ typedef enum
 	SPA_ACC_MAX,
 } SPA_ACC_INFO_T;
 
-#define ADC_RUNNING_AVG_SHIFT	4
+#define ADC_RUNNING_AVG_SHIFT	3
 #define ADC_RUNNING_AVG_SIZE	(1 << ADC_RUNNING_AVG_SHIFT)
+#define RECHARGE_THRLD_CNT 4
+#if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
+#define BACKCHARGING_THRLD_CNT 3
+#endif
 
 // Update interval, descending
 #define SPA_BATT_UPDATE_INTERVAL_INIT0 30000
@@ -53,7 +67,7 @@ typedef enum
 #define SPA_BATT_UPDATE_INTERVAL 30000
 #define SPA_BATT_UPDATE_INTERVAL_WHILE_CHARGING 5000
 
-// Init progress, descending steps.
+/* Init progress, descending steps. */
 enum
 {
 	SPA_INIT_PROGRESS_STEP0,
@@ -64,11 +78,11 @@ enum
 	SPA_INIT_PROGRESS_STEP5,
 };
 
-#define SPA_INIT_PROGRESS_START SPA_INIT_PROGRESS_STEP5 
+#define SPA_INIT_PROGRESS_START SPA_INIT_PROGRESS_STEP5
 #define SPA_INIT_PROGRESS_DONE SPA_INIT_PROGRESS_STEP0
 #define SPA_INIT_PROGRESS_DURATION 10000 // 10 SECONDS
 
-// For charging status, more detail 
+/* For charging status, more detail */
 enum
 {
 	SPA_STATUS_NONE, // no additional status.
@@ -82,6 +96,7 @@ enum
 	SPA_STATUS_FULL_RECHARGE_BACK_CHARGING,
 #endif
 	SPA_STATUS_VF_INVALID,
+	SPA_STATUS_VF_RECOVER,
 	SPA_STATUS_MAX,
 };
 
@@ -96,6 +111,7 @@ enum
 	SPA_MACHINE_NONE,
 	SPA_MACHINE_NORMAL,
 	SPA_MACHINE_FULL_CHARGE_TIMER,
+	SPA_MACHINE_SIOP,
 };
 
 enum
@@ -122,7 +138,7 @@ enum
 		battery information update cycle
 */
 
-typedef struct 
+typedef struct
 {
 	unsigned int phase; // discharging, charging, suspend, full charge and discharge, full charge and recharge, suspend
 	unsigned int status;
@@ -137,6 +153,7 @@ struct spa_temp_tb
 struct spa_power_data
 {
 	unsigned char *charger_name;
+	unsigned char *batt_cell_name;
 
 	int suspend_temp_hot;
 	int recovery_temp_hot;
@@ -146,8 +163,8 @@ struct spa_power_data
 	unsigned int eoc_current;
 	unsigned int recharge_voltage;
 	unsigned int charging_cur_usb;
-	unsigned int charging_cur_cdp_usb;
 	unsigned int charging_cur_wall;
+	unsigned int charging_cur_cdp_usb;
 #if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
 	unsigned int backcharging_time;
 	unsigned int recharging_eoc;
@@ -180,9 +197,14 @@ struct spa_batt_info
 	unsigned int capacity;
 	unsigned int technology;
 	unsigned int voltage;
+	int batt_current;
 	unsigned int vf_status;
 	unsigned int update_interval;
-	unsigned int disable_temp_check;
+	unsigned int siop_level;
+	unsigned int recharge_cnt;
+#if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
+	unsigned int backcharging_cnt;
+#endif
 
 	// for fake full capacity
 	unsigned int fakemode;
@@ -233,6 +255,8 @@ struct spa_power_desc
 	struct workqueue_struct *spa_workqueue;
 	struct wake_lock spa_wakelock;
 	struct wake_lock acc_wakelock;
+	struct wake_lock batt_work_wakelock;
+	struct mutex eventlock;
 
 	struct spa_power_data *pdata;
 

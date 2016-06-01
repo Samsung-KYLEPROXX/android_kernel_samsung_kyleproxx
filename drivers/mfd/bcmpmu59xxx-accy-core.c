@@ -42,6 +42,12 @@
 #include <linux/seq_file.h>
 #endif
 
+//ENABLE_OTG
+#ifdef CONFIG_USB_SWITCH_FSA9485
+extern u8 fsa9485_otg_status(void);
+extern void fsa9485_otg_vbus_en(u8 on);
+#endif
+
 /* TPROBE_MAX definition */
 #define TPROBE_MAX_USEC			16000
 #define TPROBE_MAX_MSB_MASK		0xC0
@@ -61,6 +67,9 @@
 
 #define PMU_CHRGR_CURR_DEFAULT	500
 #define MAX_EVENTS		100
+
+#define CHRGR_RETRIES		30
+#define ACCY_DELAY_20		20
 
 #ifdef CONFIG_DEBUG_FS
 #define DEBUG_FS_PERMISSIONS	(S_IRUSR | S_IWUSR)
@@ -89,6 +98,7 @@ struct bcmpmu_accy_data {
 	struct bcmpmu_accy_event event_pool[MAX_EVENTS];
 	struct list_head event_pending_list;
 	struct list_head event_free_list;
+	struct mutex accy_mutex;
 	spinlock_t accy_lock;
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock accy_wake_lock;
@@ -97,7 +107,8 @@ struct bcmpmu_accy_data {
 	struct pi_mgr_qos_node qos_client;
 #endif
 	enum bcmpmu_chrgr_type_t chrgr_type;
-	enum bcmpmu_chrgr_type_t chrgr_type_prev;
+	enum bcmpmu_usb_id_lvl_t pmu_usb_id;
+	bool otg_session;
 	int charging_curr;
 	int otg_block_enabled;
 	int adp_block_enabled;
@@ -106,6 +117,7 @@ struct bcmpmu_accy_data {
 	int adp_cal_done;
 	atomic_t usb_allow_bc_detect;
 	bool icc_host_ctrl;
+	bool false_usb_rm;
 	int usb_host_en;
 };
 
@@ -170,18 +182,18 @@ static u32 bcmpmu_pmu_curr_table[] = {
 };
 
 static u32 bcmpmu_pmu_curr_acld_table[] = {
-	88,
-	244,
-	368,
-	449,
-	483,
-	590,
-	624,
-	691,
-	836,
-	1051,
-	1255,
-	1565,
+	85,
+	229,
+	365,
+	423,
+	455,
+	557,
+	589,
+	652,
+	789,
+	992,
+	1193,
+	1491,
 };
 
 static struct trim_to_percentage trim_to_per[] = {
@@ -222,11 +234,8 @@ static int charging_enable = 1;
 module_param_named(charging_enable, charging_enable, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 
-#if 0
 static int debug_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT | \
 			BCMPMU_PRINT_FLOW;
-#endif
-static int debug_mask = 0xff;
 
 #define pr_accy(debug_level, args...) \
 	do { \
@@ -268,7 +277,6 @@ static bool _chrgr_type_usb(int chrgr_type)
 	case PMU_CHRGR_TYPE_TYPE2:
 	case PMU_CHRGR_TYPE_PS2:
 	case PMU_CHRGR_TYPE_ACA_DOCK:
-		is_usb = false;
 	default:
 		is_usb = false;
 		break;
@@ -290,10 +298,10 @@ static int _usb_host_en(struct bcmpmu_accy_data *di, int enable)
 		return -EAGAIN;
 	}
 
-		ret = bcmpmu->read_dev(bcmpmu, PMU_REG_MBCCTRL3, &reg);
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_MBCCTRL3, &reg);
 	if (ret) {
 		pr_accy(ERROR, "%s: PMU read failed\n", __func__);
-			return ret;
+		return ret;
 	}
 
 	/* If charging is already enabled/disabled just return */
@@ -313,15 +321,23 @@ static int _usb_host_en(struct bcmpmu_accy_data *di, int enable)
 			return ret;
 		}
 		di->usb_host_en = enable;
-	ret = bcmpmu_accy_queue_event(di, PMU_CHRGR_EVT_CHRG_STATUS,
-			&di->usb_host_en);
+		if (di->chrgr_type)
+			ret = bcmpmu_accy_queue_event(di,
+				PMU_CHRGR_EVT_CHRG_STATUS,
+				&di->usb_host_en);
 	} else {
 		di->usb_host_en = enable;
-		ret = bcmpmu_accy_queue_event(di, PMU_CHRGR_EVT_CHRG_STATUS,
-			&di->usb_host_en);
+		if (di->chrgr_type)
+			ret = bcmpmu_accy_queue_event(di,
+				PMU_CHRGR_EVT_CHRG_STATUS,
+				&di->usb_host_en);
 	}
 
-	pr_accy(FLOW, "%s:ENABLE %d\n", __func__, di->usb_host_en);
+	if (di->chrgr_type)
+	        pr_accy(FLOW, "%s:Enabling Charging: usb_host_en=%d\n", __func__, di->usb_host_en);
+	else
+		pr_accy(FLOW, "%s:No Charger\n", __func__);
+
 	return ret;
 }
 
@@ -441,7 +457,6 @@ static int _set_icc_fc(struct bcmpmu_accy_data *di, int curr)
 	ret = bcmpmu->write_dev(bcmpmu, PMU_REG_MBCCTRL10, (val & 0xF));
 	if (ret)
 		return ret;
-
 	di->charging_curr = val;
 	bcmpmu_accy_queue_event(di, PMU_ACCY_EVT_OUT_CHRG_CURR,
 			&di->charging_curr);
@@ -449,9 +464,8 @@ static int _set_icc_fc(struct bcmpmu_accy_data *di, int curr)
 	pr_accy(FLOW , "%s: curr = %d set to val %x\n",
 			__func__, curr, (val & 0xF));
 
-#ifndef CONFIG_SEC_CHARGING_FEATURE
 	/* If the curr passed is less than the minimum supported curr,
-	 * disbale charging
+	 * disable charging
 	 * */
 	if (curr < bcmpmu_pmu_curr_table[0]) {
 		ret = _usb_host_en(di, 0);
@@ -461,7 +475,6 @@ static int _set_icc_fc(struct bcmpmu_accy_data *di, int curr)
 		ret = _usb_host_en(di, 1);
 		di->icc_host_ctrl = true;
 	}
-#endif	
 	return ret;
 }
 
@@ -564,24 +577,257 @@ static int bcmpmu_accy_chrgr_type_handler(struct bcmpmu_accy_data *di,
 	unsigned long flags;
 
 	spin_lock_irqsave(&gp_accy_data->accy_lock, flags);
-	if ((gp_accy_data->chrgr_type_prev == PMU_CHRGR_TYPE_NONE) &&
-			(chrgr_type != PMU_CHRGR_TYPE_NONE))
-		gp_accy_data->chrgr_type_prev = chrgr_type;
-	else if (gp_accy_data->chrgr_type != PMU_CHRGR_TYPE_NONE)
-		gp_accy_data->chrgr_type_prev =
-			gp_accy_data->chrgr_type;
 	gp_accy_data->chrgr_type = chrgr_type;
+	if (_chrgr_type_usb(chrgr_type))
+		gp_accy_data->otg_session = true;
 	spin_unlock_irqrestore(&gp_accy_data->accy_lock, flags);
 
 	bcmpmu_accy_queue_event(gp_accy_data,
 			PMU_ACCY_EVT_OUT_CHRGR_TYPE,
 			&gp_accy_data->chrgr_type);
 
-	if (gp_accy_data->chrgr_type == PMU_CHRGR_TYPE_NONE)
+	if (gp_accy_data->chrgr_type == PMU_CHRGR_TYPE_NONE) {
 		bcmpmu_accy_pm_qos_request(gp_accy_data, false);
-	else
+		if (gp_accy_data->otg_session) {
+			gp_accy_data->otg_session = false;
+			bcmpmu_accy_queue_event(gp_accy_data,
+					PMU_ACCY_EVT_OUT_SESSION_INVALID,
+					NULL);
+		}
+	} else {
 		bcmpmu_accy_pm_qos_request(gp_accy_data, true);
+	}
 
+	return 0;
+}
+static int bcmpmu_set_ntcht_rise(struct bcmpmu59xxx *bcmpmu,
+		int temp_rise)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int rise_7_0, rise_9_8;
+	u8 reg;
+
+	result.conv = temp_rise * 10;
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			true);
+	if (ret)
+		return ret;
+
+	pr_accy(FLOW, "NTC temp->raw: %d\n", result.raw);
+
+	rise_7_0 = result.raw & NTCHT_RISE_7_0_MASK;
+	rise_9_8 = ((result.raw >> 8) & 0x3) << NTCHT_RISE_9_8_SHIFT;
+
+	bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	reg &= ~NTCHT_RISE_9_8_MASK;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+	reg |= rise_9_8;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+
+	reg = rise_7_0;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL5, reg);
+
+	return 0;
+}
+static int bcmpmu_set_ntcht_fall(struct bcmpmu59xxx *bcmpmu,
+		int temp_fall)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int fall_7_0, fall_9_8;
+	u8 reg;
+
+	result.conv = temp_fall * 10;
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			true);
+	if (ret)
+		return ret;
+
+	pr_accy(FLOW, "NTC temp->raw: %d\n", result.raw);
+
+	fall_7_0 = result.raw & NTCHT_FALL_7_0_MASK;
+	fall_9_8 = ((result.raw >> 8) & 0x3) << NTCHT_FALL_9_8_SHIFT;
+
+	bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	reg &= ~NTCHT_FALL_9_8_MASK;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+	reg |= fall_9_8;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+
+	reg = fall_7_0;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL6, reg);
+
+	return 0;
+}
+static int bcmpmu_set_ntcct_rise(struct bcmpmu59xxx *bcmpmu,
+		int temp_rise)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int rise_7_0, rise_9_8;
+	u8 reg;
+
+	result.conv = temp_rise * 10;
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			true);
+	if (ret)
+		return ret;
+
+	pr_accy(FLOW, "NTC temp->raw: %d\n", result.raw);
+
+	rise_7_0 = result.raw & NTCCT_RISE_7_0_MASK;
+	rise_9_8 = ((result.raw >> 8) & 0x3) << NTCCT_RISE_9_8_SHIFT;
+
+	bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	reg &= ~NTCCT_RISE_9_8_MASK;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+	reg |= rise_9_8;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+
+	reg = rise_7_0;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL7, reg);
+	return 0;
+}
+static int bcmpmu_set_ntcct_fall(struct bcmpmu59xxx *bcmpmu,
+		int temp_fall)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int fall_7_0, fall_9_8;
+	u8 reg;
+	result.conv = temp_fall * 10;
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			true);
+	if (ret)
+		return ret;
+
+	pr_accy(FLOW, "NTC temp->raw: %d\n", result.raw);
+
+	fall_7_0 = result.raw & NTCCT_FALL_7_0_MASK;
+	fall_9_8 = ((result.raw >> 8) & 0x3) << NTCCT_FALL_9_8_SHIFT;
+
+	bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	reg &= ~NTCCT_FALL_9_8_MASK;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+	reg |= fall_9_8;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL9, reg);
+
+	reg = fall_7_0;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_CMPCTRL8, reg);
+
+	return 0;
+}
+static int bcmpmu_get_ntcht_rise(struct bcmpmu59xxx *bcmpmu,
+		int *temp_rise)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int rise_7_0, rise_9_8;
+	u8 reg;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	if (ret)
+		return ret;
+	rise_9_8 = (reg & NTCHT_RISE_9_8_MASK) >> NTCHT_RISE_9_8_SHIFT;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL5, &reg);
+	if (ret)
+		return ret;
+
+	rise_7_0 = reg & NTCHT_RISE_7_0_MASK;
+	result.raw = rise_7_0 | (rise_9_8 << 8);
+
+	pr_accy(FLOW, "NTC raw: %d\n", result.raw);
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			false);
+	if (ret)
+		return ret;
+	*temp_rise = result.conv;
+	return 0;
+}
+static int bcmpmu_get_ntcht_fall(struct bcmpmu59xxx *bcmpmu,
+		int *temp_fall)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int fall_7_0, fall_9_8;
+	u8 reg;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	if (ret)
+		return ret;
+	fall_9_8 = (reg & NTCHT_FALL_9_8_MASK) >> NTCHT_FALL_9_8_SHIFT;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL6, &reg);
+	if (ret)
+		return ret;
+
+	fall_7_0 = reg & NTCHT_FALL_7_0_MASK;
+	result.raw = fall_7_0 | (fall_9_8 << 8);
+	pr_accy(FLOW, "NTC raw: %d\n", result.raw);
+
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			false);
+	if (ret)
+		return ret;
+	*temp_fall = result.conv;
+	return 0;
+}
+
+static int bcmpmu_get_ntcct_rise(struct bcmpmu59xxx *bcmpmu, int *temp_rise)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int rise_7_0, rise_9_8;
+	u8 reg;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	if (ret)
+		return ret;
+	rise_9_8 = (reg & NTCCT_RISE_9_8_MASK) >> NTCCT_RISE_9_8_SHIFT;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL7, &reg);
+	if (ret)
+		return ret;
+
+	rise_7_0 = reg & NTCCT_RISE_7_0_MASK;
+	result.raw = rise_7_0 | (rise_9_8 << 8);
+	pr_accy(FLOW, "NTC raw: %d\n", result.raw);
+
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			false);
+	if (ret)
+		return ret;
+	*temp_rise = result.conv;
+	return 0;
+
+}
+static int bcmpmu_get_ntcct_fall(struct bcmpmu59xxx *bcmpmu, int *temp_fall)
+{
+	struct bcmpmu_adc_result result;
+	int ret;
+	int fall_7_0, fall_9_8;
+	u8 reg;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL9, &reg);
+	if (ret)
+		return ret;
+	fall_9_8 = (reg & NTCCT_FALL_9_8_MASK) >> NTCCT_FALL_9_8_SHIFT;
+
+	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_CMPCTRL8, &reg);
+	if (ret)
+		return ret;
+
+	fall_7_0 = reg & NTCCT_FALL_7_0_MASK;
+	result.raw = fall_7_0 | (fall_9_8 << 8);
+	pr_accy(FLOW, "NTC raw: %d\n", result.raw);
+
+	ret = bcmpmu_adc_convert(bcmpmu, PMU_ADC_CHANN_NTC, &result,
+			false);
+	if (ret)
+		return ret;
+	*temp_fall = result.conv;
 	return 0;
 }
 
@@ -597,8 +843,21 @@ int bcmpmu_usb_set(struct bcmpmu59xxx *bcmpmu,
 
 	switch (ctrl) {
 	case BCMPMU_USB_CTRL_CHRG_CURR_LMT:
-		if (!is_charging_state())
+
+#ifndef CONFIG_SEC_CHARGING_FEATURE
+		if (!is_charging_state()) {
+			mutex_lock(&di->accy_mutex);
 			_set_icc_fc(di, data);
+			mutex_unlock(&di->accy_mutex);
+		}
+#else
+		/* Under SEC_CHARGING_FEATURE, SPA driver controls
+		 * the charging current. BCMPMU OTG charging curr msg
+		 * should be ignored.
+		*/
+		pr_accy(FLOW , "%s: Ignore OTG CHRG_CURR_LMT, curr=%d\n",
+			__func__, (int)data);
+#endif
 		break;
 	case BCMPMU_USB_CTRL_VBUS_ON_OFF:
 		ret = bcmpmu_usb_otg_bost_en(bcmpmu, !!data);
@@ -820,7 +1079,18 @@ int bcmpmu_usb_set(struct bcmpmu59xxx *bcmpmu,
 		else
 			atomic_set(&di->usb_allow_bc_detect, 0);
 		break;
-
+	case BCMPMU_USB_CTRL_SET_NTCHT_RISE:
+		ret = bcmpmu_set_ntcht_rise(di->bcmpmu, data);
+		break;
+	case BCMPMU_USB_CTRL_SET_NTCHT_FALL:
+		ret = bcmpmu_set_ntcht_fall(di->bcmpmu, data);
+		break;
+	case BCMPMU_USB_CTRL_SET_NTCCT_RISE:
+		ret = bcmpmu_set_ntcct_rise(di->bcmpmu, data);
+		break;
+	case BCMPMU_USB_CTRL_SET_NTCCT_FALL:
+		ret = bcmpmu_set_ntcct_fall(di->bcmpmu, data);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -836,6 +1106,10 @@ int bcmpmu_usb_get(struct bcmpmu59xxx *bcmpmu,
 	struct bcmpmu_accy_data *di = bcmpmu->accyinfo;
 	u8 val, val1;
 	int tprobe;
+	int update = 1;
+
+	pr_accy(FLOW, "%s: ctrl=%d,pmu_usb_id=%d\n",
+		__func__, ctrl, di->pmu_usb_id);
 
 	switch (ctrl) {
 	case BCMPMU_USB_CTRL_TPROBE_MAX:
@@ -931,6 +1205,12 @@ int bcmpmu_usb_get(struct bcmpmu59xxx *bcmpmu,
 		val = val >> OTG_VBUS_STAT_SHIFT;
 		break;
 	case BCMPMU_USB_CTRL_GET_ID_VALUE:
+#if defined(CONFIG_USB_SWITCH_FSA9485) || defined(CONFIG_USB_SWITCH_TSU6111) || defined(CONFIG_RT8973)
+		pr_accy(FLOW, "%s ctrl %d,di->pmu_usb_id %d\n",
+			__func__, ctrl, di->pmu_usb_id);
+		val = di->pmu_usb_id;
+		ret = 0;
+#else
 		ret = bcmpmu->read_dev(bcmpmu,
 				PMU_REG_ENV4,
 				&val);
@@ -940,6 +1220,7 @@ int bcmpmu_usb_get(struct bcmpmu59xxx *bcmpmu,
 			val = bcmpmu_usb_id_map[val];
 		pr_accy(FLOW, "ENV4 %x val, id mak %x\n",
 			val, ENV4_ID_CODE_SHIFT);
+#endif
 		break;
 	case BCMPMU_USB_CTRL_GET_CHRGR_TYPE:
 		ret = 0;
@@ -949,14 +1230,35 @@ int bcmpmu_usb_get(struct bcmpmu59xxx *bcmpmu,
 		ret = 0;
 		val = atomic_read(&di->usb_allow_bc_detect);
 		break;
+	case BCMPMU_USB_CTRL_GET_NTCHT_RISE:
+		ret = bcmpmu_get_ntcht_rise(di->bcmpmu, data);
+		update = 0;
+		break;
+	case BCMPMU_USB_CTRL_GET_NTCHT_FALL:
+		ret = bcmpmu_get_ntcht_fall(di->bcmpmu, data);
+		update = 0;
+		break;
+	case BCMPMU_USB_CTRL_GET_NTCCT_RISE:
+		ret = bcmpmu_get_ntcct_rise(di->bcmpmu, data);
+		update = 0;
+		break;
+	case BCMPMU_USB_CTRL_GET_NTCCT_FALL:
+		ret = bcmpmu_get_ntcct_fall(di->bcmpmu, data);
+		update = 0;
+		break;
+	case BCMPMU_USB_OTG_SESSION:
+		ret = 0;
+		val = di->otg_session;
+		break;
 	default:
 		ret = -EINVAL;
 		break;
 	}
-	if ((ret == 0) && (data != NULL))
+
+	if ((ret == 0) && (data != NULL) && (update))
 		*(unsigned int *)data = val;
 
-	pr_accy(FLOW, "%s, ctrl=%d, val=0x%X\n", __func__, ctrl,
+	pr_accy(FLOW, "%s, ctrl=%d, return val=0x%X\n", __func__, ctrl,
 			((data) ? (*(unsigned int *)data) : 0));
 	return ret;
 }
@@ -965,15 +1267,22 @@ EXPORT_SYMBOL_GPL(bcmpmu_usb_get);
 int bcmpmu_chrgr_usb_en(struct bcmpmu59xxx *bcmpmu, int enable)
 {
 	struct bcmpmu_accy_data *di = bcmpmu->accyinfo;
-
-	return _usb_host_en(di, enable);
+	int ret;
+	mutex_lock(&di->accy_mutex);
+	ret =  _usb_host_en(di, enable);
+	mutex_unlock(&di->accy_mutex);
+	return ret;
 }
 EXPORT_SYMBOL(bcmpmu_chrgr_usb_en);
 
 int bcmpmu_set_icc_fc(struct bcmpmu59xxx *bcmpmu, int curr)
 {
+	int ret;
 	struct bcmpmu_accy_data *di = bcmpmu->accyinfo;
-	return _set_icc_fc(di, curr);
+	mutex_lock(&di->accy_mutex);
+	ret = _set_icc_fc(di, curr);
+	mutex_unlock(&di->accy_mutex);
+	return ret;
 }
 EXPORT_SYMBOL(bcmpmu_set_icc_fc);
 
@@ -1104,15 +1413,23 @@ EXPORT_SYMBOL(bcmpmu_cc_trim_down);
 bool bcmpmu_get_mbc_faults(struct bcmpmu59xxx *bcmpmu)
 {
 	int ret = 0;
-	u8 reg;
+	u8 reg = 0;
 
 	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_ENV3, &reg);
-	if (reg & ENV3_CV_TMR_EXP || (reg & ENV3_TRUE_TF))
+	if (ret)
 		return false;
+	if (reg & ENV3_TRUE_TF) {
+		pr_accy(FLOW, "%s: ENV3 = %d\n", __func__, reg);
+		return false;
+	}
 
 	ret = bcmpmu->read_dev(bcmpmu, PMU_REG_ENV6, &reg);
-	if ((reg & ENV6_HW_TCH_EXP) || (reg & ENV6_MBCERROR))
+	if (ret)
 		return false;
+	if ((reg & ENV6_HW_TCH_EXP) || (reg & ENV6_MBCERROR)) {
+		pr_accy(FLOW, "%s: ENV6 = %d\n", __func__, reg);
+		return false;
+	}
 
 	return true;
 
@@ -1173,10 +1490,50 @@ int bcmpmu_accy_chrgr_type_notify(int chrgr_type)
 		pr_accy(FLOW, "----charger type: %s ---\n",
 				chrgr_types_str[chrgr_type]);
 		ret = bcmpmu_accy_chrgr_type_handler(gp_accy_data, chrgr_type);
+
 	}
 	return ret;
 }
 EXPORT_SYMBOL(bcmpmu_accy_chrgr_type_notify);
+
+int bcmpmu_accy_id_change_notify(uint8_t id)
+{
+	int ret = 0;
+
+	pr_accy(ERROR, "%s: id=%d, gp_accy_data %x\n",
+		__func__, id, gp_accy_data);
+
+	if (!atomic_read(&drv_init_done)) {
+		pr_accy(ERROR, "%s: BCMPMU Accy driver is not initialized\n",
+			__func__);
+		return -1;
+	}
+
+	if (!gp_accy_data) {
+		pr_accy(ERROR, "%s gp_accy_data NULL\n", __func__);
+		return -1;
+	}
+
+	gp_accy_data->pmu_usb_id = id;
+
+	if (gp_accy_data->pmu_usb_id == PMU_USB_ID_GROUND)
+		gp_accy_data->otg_session = true;
+
+	pr_accy(FLOW, "%s pmu_usb_id %d\n", __func__, gp_accy_data->pmu_usb_id);
+	bcmpmu_accy_queue_event(gp_accy_data, PMU_ACCY_EVT_OUT_ID_CHANGE, NULL);
+
+	return ret;
+}
+EXPORT_SYMBOL(bcmpmu_accy_id_change_notify);
+
+void send_otg_insert_event(bool attached)
+{
+	if (attached)
+		bcmpmu_accy_id_change_notify(PMU_USB_ID_GROUND);
+	else
+		bcmpmu_accy_id_change_notify(PMU_USB_ID_FLOAT);
+}
+EXPORT_SYMBOL_GPL(send_otg_insert_event);
 
 static void bcmpmu_accy_pm_qos_request(struct bcmpmu_accy_data *di, bool active)
 {
@@ -1202,33 +1559,44 @@ static void bcmpmu_accy_pm_qos_request(struct bcmpmu_accy_data *di, bool active)
 #endif
 	}
 }
+static void bcmpmu_accy_set_chrgr_def_curr(struct bcmpmu_accy_data *di)
+{
+	int ret;
+	int retries = CHRGR_RETRIES;
 
+	while (retries--) {
+		ret = bcmpmu_set_chrgr_def_current(di->bcmpmu);
+		if (!ret)
+			break;
+		msleep(ACCY_DELAY_20);
+	}
+	if (retries <= 0)
+		BUG_ON(1);
+
+}
 static void bcmpmu_accy_isr(enum bcmpmu59xxx_irq irq, void *data)
 {
 	struct bcmpmu_accy_data *di = data;
 	int board_id = di->bcmpmu->pdata->board_id;
 	int idx;
-	int chrgr_type;
-	int chrgr_type_prev;
-	bool chrgr_is_usb;
-	unsigned long flags;
 	int event = PMU_EVENT_MAX;
-
 
 	idx = _irq_to_index(irq);
 	pr_accy(FLOW, "%s: IRQ: %d idx %d\n", __func__, irq, idx);
 	BUG_ON(idx < 0);
 
-	spin_lock_irqsave(&gp_accy_data->accy_lock, flags);
-	chrgr_type = di->chrgr_type;
-	chrgr_type_prev = di->chrgr_type_prev;
-	chrgr_is_usb = _chrgr_type_usb(chrgr_type_prev);
-	spin_unlock_irqrestore(&gp_accy_data->accy_lock, flags);
-	pr_accy(FLOW, "chrgr_type: %d chrgr_type_prev:%d\n",
-			chrgr_type, chrgr_type_prev);
 	switch (irq) {
 	case PMU_IRQ_USBINS:
-		event = accy_irq_evt_map[idx].event;
+		if (di->false_usb_rm) {
+			bcmpmu_accy_set_chrgr_def_curr(di);
+			_usb_host_en(di, 1);
+			pr_accy(FLOW, "IRQ_USBINS:Not sent.false_usb_rm:%d\n",
+					di->false_usb_rm);
+			di->false_usb_rm = false;
+		} else {
+			event = accy_irq_evt_map[idx].event;
+			pr_accy(FLOW, "PMU_IRQ_USBINS: sent\n");
+		}
 		break;
 	case PMU_IRQ_CHGDET_TO:
 		/**
@@ -1245,21 +1613,18 @@ static void bcmpmu_accy_isr(enum bcmpmu59xxx_irq irq, void *data)
 			event = PMU_ACCY_EVT_OUT_CHGDET_LATCH_TO;
 		break;
 	case PMU_IRQ_OTG_SESS_VALID_F:
-		spin_lock_irqsave(&gp_accy_data->accy_lock, flags);
-		di->chrgr_type = PMU_CHRGR_TYPE_NONE;
-		di->chrgr_type_prev = PMU_CHRGR_TYPE_NONE;
-		event = accy_irq_evt_map[idx].event;
-		spin_unlock_irqrestore(&gp_accy_data->accy_lock, flags);
-		if (chrgr_is_usb) {
+		pr_accy(VERBOSE, "PMU_IRQ_OTG_SESS_VALID_F\n");
+		if (di->otg_session) {
 			pr_accy(VERBOSE,
 				"posting event PMU_IRQ_OTG_SESS_VALID_F\n");
 			event = accy_irq_evt_map[idx].event;
+			di->otg_session = false;
 		} else {
 			event = -1;
 		}
 		break;
 	case PMU_IRQ_VBUS_VALID_F:
-		if (chrgr_is_usb) {
+		if (di->otg_session) {
 			pr_accy(VERBOSE,
 				"posting event PMU_IRQ_VBUS_VALID_F\n");
 			event = accy_irq_evt_map[idx].event;
@@ -1267,11 +1632,33 @@ static void bcmpmu_accy_isr(enum bcmpmu59xxx_irq irq, void *data)
 			event = -1;
 		}
 		break;
+	case PMU_IRQ_IDCHG:
+		bcmpmu_usb_get(di->bcmpmu,
+			BCMPMU_USB_CTRL_GET_ID_VALUE, &di->pmu_usb_id);
+
+		if ((di->pmu_usb_id == PMU_USB_ID_RID_A) ||
+			(di->pmu_usb_id == PMU_USB_ID_RID_C) ||
+			(di->pmu_usb_id == PMU_USB_ID_GROUND))
+			di->otg_session = true;
+
+		event = accy_irq_evt_map[idx].event;
+		pr_accy(VERBOSE, " ==== pmu_id %d\n", di->pmu_usb_id);
+		break;
 	case PMU_IRQ_USBRM:
+		if ((di->bcmpmu->flags & BCMPMU_ACLD_EN) &&
+				bcmpmu_acld_false_usbrm(di->bcmpmu)) {
+			di->false_usb_rm = true;
+			pr_accy(FLOW, "IRQ_USBRM: Not sent.false_usb_rm:%d\n",
+					di->false_usb_rm);
+		} else {
+
+			event = accy_irq_evt_map[idx].event;
+			pr_accy(FLOW, "PMU_IRQ_USBRM: sent\n");
+		}
+		break;
 	case PMU_IRQ_CHGDET_LATCH:
 	case PMU_IRQ_VA_SESS_VALID_R:
 	case PMU_IRQ_VBUS_VALID_R:
-	case PMU_IRQ_IDCHG:
 	case PMU_IRQ_USBOV:
 	case PMU_IRQ_USBOV_DIS:
 	case PMU_IRQ_CHGERRDIS:
@@ -1302,8 +1689,7 @@ static int bcmpmu_accy_eventq_init(struct bcmpmu_accy_data *di)
 static int bcmpmu_accy_register_irqs(struct bcmpmu_accy_data *di)
 {
 	int ret = 0;
-	int i = 0;
-	int j;
+	int i;
 
 	for (i = 0; i < NUM_ACCY_CORE_IRQS; i++) {
 		ret = di->bcmpmu->register_irq(di->bcmpmu,
@@ -1317,23 +1703,40 @@ static int bcmpmu_accy_register_irqs(struct bcmpmu_accy_data *di)
 			ret = di->bcmpmu->unmask_irq(di->bcmpmu,
 					accy_irq_evt_map[i].irq);
 	} else {
-		for (j = 0; j < i; j++)
+		for (; i >= 0; i--)
 			di->bcmpmu->unregister_irq(di->bcmpmu,
-					accy_irq_evt_map[j].irq);
+					accy_irq_evt_map[i].irq);
 	}
 	return ret;
 }
 
 #ifdef CONFIG_DEBUG_FS
-static int debugfs_usb_host_en(void *data, u64 enable)
+static int debugfs_get_usb_host_en(void *data, u64 *enable)
+{
+	struct bcmpmu_accy_data *di = (struct bcmpmu_accy_data *)data;
+	u8 reg;
+
+	di->bcmpmu->read_dev(di->bcmpmu, PMU_REG_MBCCTRL3, &reg);
+	pr_accy(FLOW, "reg(0x%x) = 0x%x\n", PMU_REG_MBCCTRL3, reg);
+
+	*enable = di->usb_host_en;
+
+	return 0;
+
+}
+static int debugfs_set_usb_host_en(void *data, u64 enable)
 {
 	struct bcmpmu_accy_data *di = (struct bcmpmu_accy_data *)data;
 
-	bcmpmu_chrgr_usb_en(di->bcmpmu, (enable & MBCCTRL3_USB_HOSTEN_MASK));
+	if (enable == true)
+		bcmpmu_chrgr_usb_en(di->bcmpmu, 1);
+	else if (enable == false)
+		bcmpmu_chrgr_usb_en(di->bcmpmu, 0);
+
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(usb_host_en_fops,
-		NULL, debugfs_usb_host_en, "%llu\n");
+		debugfs_get_usb_host_en, debugfs_set_usb_host_en, "%llu\n");
 
 static void bcmpmu_accy_debugfs_init(struct bcmpmu_accy_data *di)
 {
@@ -1380,7 +1783,7 @@ static int bcmpmu_accy_suspend(struct platform_device *pdev, pm_message_t state)
 	struct bcmpmu59xxx *bcmpmu = dev_get_drvdata(pdev->dev.parent);
 	struct bcmpmu_accy_data *di;
 	di = bcmpmu->accyinfo;
-	flush_delayed_work_sync(&di->evt_notify_work);
+	flush_delayed_work(&di->evt_notify_work);
 	return 0;
 }
 
@@ -1413,12 +1816,7 @@ static int __devinit bcmpmu_accy_probe(struct platform_device *pdev)
 	bcmpmu->accyinfo = di;
 	di->bcmpmu = bcmpmu;
 	di->pdata = pdata;
-
-	ret = bcmpmu_accy_register_irqs(di);
-	if (ret) {
-		pr_accy(INIT, "%s: failed to register irqs\n", __func__);
-		goto free_mem;
-	}
+	di->pmu_usb_id = PMU_USB_ID_FLOAT;
 
 	di->wq = create_singlethread_workqueue("accy_wq");
 	if (!di->wq) {
@@ -1430,6 +1828,7 @@ static int __devinit bcmpmu_accy_probe(struct platform_device *pdev)
 			bcmpmu_accy_evt_notify_work);
 
 	spin_lock_init(&di->accy_lock);
+	mutex_init(&di->accy_mutex);
 	bcmpmu_accy_eventq_init(di);
 
 #ifdef CONFIG_HAS_WAKELOCK
@@ -1449,8 +1848,13 @@ static int __devinit bcmpmu_accy_probe(struct platform_device *pdev)
 #endif
 	gp_accy_data = di;
 	di->chrgr_type = PMU_CHRGR_TYPE_NONE;
-	di->chrgr_type_prev = PMU_CHRGR_TYPE_NONE;
 	atomic_set(&drv_init_done, 1);
+
+	ret = bcmpmu_accy_register_irqs(di);
+	if (ret) {
+		pr_accy(INIT, "%s: failed to register irqs\n", __func__);
+		goto free_mem;
+	}
 	pr_accy(INIT, "%s: success\n", __func__);
 	return 0;
 

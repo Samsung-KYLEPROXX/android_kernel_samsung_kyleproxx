@@ -42,10 +42,14 @@ static int dbg_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT |
 #define SPA_FIFO_SIZE	16
 #define SPA_FIFO_IS_EMPTY(f) ((f).head == (f).tail && !(f).full)
 #define SPA_FIFO_IS_FULL(f) ((f).full)
+#define ADC_RETRY_DELAY		100 /* 100ms */
 
 #define SPA_WORK_SCHEDULE_DELAY	0
 
 #define SPA_ADC_READ_TRIES 5
+
+struct bcmpmu59xxx *bcmpmu_info;
+
 struct spa_event_fifo {
 	u32 head;
 	u32 tail;
@@ -86,6 +90,7 @@ static enum power_supply_property bcmpmu_spa_pb_chrgr_props[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_BATT_TEMP_ADC,
 };
@@ -137,17 +142,17 @@ static int bcmpmu_spa_pb_chrgr_set_property(struct power_supply *ps,
 			while (retries--) {
 				msleep(100);
 				bcmpmu->read_dev(bcmpmu, PMU_REG_ENV2, &reg);
-				if(bcmpmu_spa_pb->chg_type == PMU_CHRGR_TYPE_NONE)
+				if (bcmpmu_spa_pb->chg_type == PMU_CHRGR_TYPE_NONE)
 					break;
-				
-				if(reg & ENV2_P_UBPD_INT) {
+
+				if (reg & ENV2_P_UBPD_INT) {
 			bcmpmu_chrgr_usb_en(bcmpmu, 1);
 					break;
 				} else {
-					if(!retries)
-						pr_pb(FLOW, "%s: enable charging fail\n", __func__);						
+					if (!retries)
+						pr_pb(FLOW, "%s: enable charging fail\n", __func__);
 				}
-			}		
+			}
 		} else {
 			pr_pb(FLOW, "%s: disable charging\n", __func__);
 			bcmpmu_chrgr_usb_en(bcmpmu, 0);
@@ -202,9 +207,11 @@ static void  spa_bcmpmu_adc_read(struct bcmpmu59xxx *bcmpmu,
 		ret = bcmpmu_adc_read(bcmpmu, channel, req, result);
 		if (!ret)
 			break;
+		msleep(ADC_RETRY_DELAY);
 	}
 	BUG_ON(retries <= 0);
 }
+
 #if 0
 extern unsigned int musb_get_charger_type(void);
 #endif
@@ -252,17 +259,8 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_TEMP:
 	case POWER_SUPPLY_PROP_BATT_TEMP_ADC:
-#ifdef CONFIG_MACH_HAWAII_SS_CS02		
-		if(bcmpmu->batt_temp_adc)
-		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_BOM,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
-		else
-			spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_NTC,
-					PMU_ADC_REQ_SAR_MODE, &adc_result);						
-#else		
 		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_NTC,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
-#endif
+				PMU_ADC_REQ_RTM_MODE, &adc_result);
 		bcmpmu_spa_pb->temp_adc = adc_result.raw;
 		if (prop == POWER_SUPPLY_PROP_BATT_TEMP_ADC)
 			propval->intval = adc_result.raw;
@@ -276,7 +274,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_VMBATT,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
+				PMU_ADC_REQ_RTM_MODE, &adc_result);
 
 		bcmpmu_spa_pb->vbat = adc_result.conv;
 		propval->intval = adc_result.conv;
@@ -284,7 +282,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_PRESENT:
 		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_BSI,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
+				PMU_ADC_REQ_RTM_MODE, &adc_result);
 
 		bcmpmu_spa_pb->present = adc_result.raw;
 		propval->intval = (adc_result.raw == 0x3FF) ? 0 : 1;
@@ -292,6 +290,10 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		pr_pb(FLOW, "%s: POWER_SUPPLY_PROP_CURRENT_NOW\n", __func__);
+		break;
+
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
+		propval->intval = bcmpmu_fg_get_current_currentavg(bcmpmu);
 		break;
 
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
@@ -303,7 +305,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 		ret = -ENODATA;
 		break;
 	}
-	pr_pb(FLOW, "%s: prop = %d, ret = %d intval = %d\n",
+	pr_pb(VERBOSE, "%s: prop = %d, ret = %d intval = %d\n",
 			__func__,
 			prop, ret, propval->intval);
 	return ret;
@@ -444,7 +446,7 @@ static int bcmpmu_spa_pb_event_hndlr(struct notifier_block *nb,
 			data = POWER_SUPPLY_TYPE_BATTERY;
 			break;
 		}
-#if 0		
+#if 0
 		bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
 			event, data);
 #endif
@@ -456,7 +458,7 @@ static int bcmpmu_spa_pb_event_hndlr(struct notifier_block *nb,
 
 	default:
 		break;
-		//BUG();
+		/* BUG(); */
 	}
 	return 0;
 }
@@ -593,6 +595,7 @@ static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to alloc mem: %d\n", ret);
 		return -ENOMEM;
 	}
+	bcmpmu_info = bcmpmu;
 	bcmpmu_spa_pb->bcmpmu = bcmpmu;
 	bcmpmu->spa_pb_info = (void *)bcmpmu_spa_pb;
 
@@ -621,11 +624,25 @@ static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
 		bcmpmu_spa_pb_isr, bcmpmu_spa_pb);
 	bcmpmu->register_irq(bcmpmu, PMU_IRQ_MBOV_DIS,
 		bcmpmu_spa_pb_isr, bcmpmu_spa_pb);
+#if 0
+    /* Don't use PMU_IRQ_USBOV/PMU_IRQ_USBOV_DIS interrupt
+	   bacause PMU's USBOV threshold(6.6V/8V) can't meet SS spec(6.8V).
+	   So, SS use MUIC USBOV function(6.8V) instead of PMU USBOV*/
+	bcmpmu->register_irq(bcmpmu, PMU_IRQ_USBOV,
+	bcmpmu_spa_pb_isr, bcmpmu_spa_pb);
+	bcmpmu->register_irq(bcmpmu, PMU_IRQ_USBOV_DIS,
+	bcmpmu_spa_pb_isr, bcmpmu_spa_pb);
+#endif
+
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_MBTEMPLOW);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_MBTEMPHIGH);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_CHGERRDIS);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_MBOV);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_MBOV_DIS);
+#if 0
+	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_USBOV);
+	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_USBOV_DIS);
+#endif
 
 	bcmpmu_spa_pb->nb_chgr_det.notifier_call = bcmpmu_spa_pb_event_hndlr;
 	ret = bcmpmu_add_notifier(PMU_ACCY_EVT_OUT_CHRGR_TYPE,

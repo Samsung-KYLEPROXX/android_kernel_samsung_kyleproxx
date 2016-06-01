@@ -46,11 +46,11 @@
 
 #define ACD_DELAY msecs_to_jiffies(100)
 #define ACD_RETRY_DELAY msecs_to_jiffies(1000)
-/*
+#define DISCONNECT_EVENT_TIME (HZ * 2)
+#define REGL_BC "bc_vcc"
+
 static int debug_mask = BCMPMU_PRINT_ERROR |
 	BCMPMU_PRINT_INIT |  BCMPMU_PRINT_FLOW;
-*/
-static int debug_mask = 0xF;
 
 /*
  *Possible State MC
@@ -74,8 +74,10 @@ struct accy_det {
 	struct notifier_block chrgr_latch_event;
 	struct notifier_block chrgr_rm_event;
 	struct notifier_block id_change_event;
+	struct regulator *regl_bc;
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock wake_lock;
+	struct wake_lock notify_wake_lock;
 #endif
 	int chrgr_type;
 	int retry_cnt;
@@ -85,7 +87,6 @@ struct accy_det {
 	u32 act;
 	u32 xceiv_start;
 	bool reschedule;
-	bool clock_en;
 };
 static atomic_t drv_init_done;
 
@@ -98,10 +99,9 @@ static atomic_t drv_init_done;
 
 static void enable_bc_clock(struct accy_det *accy_d, bool en)
 {
-		bcm_hsotgctrl_en_clock(en);
-		accy_d->clock_en = en;
-		pr_acd(FLOW, "======<%s> paccy clock %x\n"
-			, __func__, accy_d->clock_en);
+	bcm_hsotgctrl_en_clock(en);
+	pr_acd(VERBOSE, "======<%s> paccy clock %x\n"
+		, __func__, en);
 }
 
 static void reset_bc(struct accy_det *accy_d)
@@ -123,7 +123,6 @@ static int is_bb_detection_done(u32 status)
 	}
 
 	return ret_status;
-
 }
 
 static unsigned int get_bc_status(struct accy_det *accy_d)
@@ -135,12 +134,12 @@ static unsigned int get_bc_status(struct accy_det *accy_d)
 	if (accy_d->bc == BCMPMU_BC_PMU_BC12) {
 		bcmpmu->read_dev(bcmpmu,
 				PMU_REG_MBCCTRL5, (u8 *)&status);
-		pr_acd(FLOW, " MBCCTRL5 %x\n", status);
+		pr_acd(VERBOSE, " MBCCTRL5 %x\n", status);
 		status &= MBCCTRL5_CHP_TYP_MASK;
 		pr_acd(FLOW, "MBCCTRL5 %x  mask %x\n",
 				status, MBCCTRL5_CHP_TYP_MASK);
 		status = status >> MBCCTRL5_CHP_TYP_SHIFT;
-		pr_acd(FLOW, " MBCCTRL5 %x shift % d\n",
+		pr_acd(VERBOSE, " MBCCTRL5 %x shift % d\n",
 				status, MBCCTRL5_CHP_TYP_SHIFT);
 		return status;
 	} else if (accy_d->bc == BCMPMU_BC_BB_BC12) {
@@ -201,14 +200,14 @@ static void accy_d_set_ldo_bit(struct accy_det *accy_d, int val)
 		status &= ~USB_DET_LDO_EN_MASK;
 	accy_d->bcmpmu->write_dev(accy_d->bcmpmu,
 			PMU_REG_MBCCTRL5, status);
-	pr_acd(FLOW, "###<%s> MBCCTRL5 %x\n", __func__, status);
+	pr_acd(VERBOSE, "###<%s> MBCCTRL5 %x\n", __func__, status);
 }
 
 static void bcmpmu_accy_set_pmu_BC12(struct bcmpmu59xxx *bcmpmu, int val)
 {
 	u8 reg;
 	bcmpmu->read_dev(bcmpmu, PMU_REG_MBCCTRL5, &reg);
-	pr_acd(FLOW, "###<%s> MBCCTRL5 %x\n", __func__, reg);
+	pr_acd(VERBOSE, "###<%s> MBCCTRL5 %x\n", __func__, reg);
 	if (val)
 		reg |= MBCCTRL5_BC12_EN_MASK;
 	else
@@ -270,7 +269,7 @@ static int bcmpmu_accy_detect_func(struct accy_det *accy_d)
 	int state = -1;
 	static u8 type2;
 
-	pr_acd(FLOW, "=== %s try %d\n",
+	pr_acd(VERBOSE, "=== %s try %d\n",
 			__func__, accy_d->retry_cnt);
 	bcmpmu_usb_get(bcmpmu,
 			BCMPMU_USB_CTRL_GET_SESSION_STATUS,
@@ -288,10 +287,11 @@ static int bcmpmu_accy_detect_func(struct accy_det *accy_d)
 			BCMPMU_USB_CTRL_GET_ID_VALUE,
 			(void *)&id_status);
 	id_check = bcmpmu_supported_chrgr_usbid(accy_d, id_status);
-	pr_acd(FLOW, "%s, id %d id_check %d\n",
+	pr_acd(VERBOSE, "%s, id %d id_check %d\n",
 			__func__, id_status, id_check);
 	if (!id_check) {
-		pr_acd(ERROR, "---Err id_check nt valid\n");
+		pr_acd(ERROR, "---Err id_check nt valid id = %d\n", id_status);
+		state = STATE_IDLE;
 		goto err;
 	}
 
@@ -325,75 +325,53 @@ err:
 	return state;
 }
 
-void bcmpm_accy_setup_detection(struct accy_det *accy_d, bool en)
+void bcmpmu_enable_bc_regl(struct accy_det *accy_d, bool en)
 {
-	u32 id_status;
+	int ret;
+	accy_d->regl_bc = regulator_get(NULL, REGL_BC);
+	if (IS_ERR(accy_d->regl_bc)) {
+		pr_acd(ERROR, "-----BC Detect regulator nt found\n");
+		return;
+	}
 
-	bcmpmu_usb_get(accy_d->bcmpmu,
-			BCMPMU_USB_CTRL_GET_ID_VALUE,
-			(void *)&id_status);
-
-	if ((accy_d->bc == BCMPMU_BC_BB_BC12) &&
-		(id_status == PMU_USB_ID_FLOAT)) {
-
-		if (en) {
-			accy_d->xceiv_start = 1;
-			pr_acd(FLOW, "=== %s ev send xceiv_start %d\n",
-					__func__, accy_d->xceiv_start);
-			bcmpmu_call_notifier(accy_d->bcmpmu,
-					PMU_CHRGR_DET_EVT_OUT_XCVR,
-					&accy_d->xceiv_start);
-		} else if ((!en) & accy_d->xceiv_start) {
-			accy_d->xceiv_start = 0;
-			pr_acd(FLOW, "=== %s ev send xceiv_start %d\n",
-					__func__, accy_d->xceiv_start);
-			bcmpmu_call_notifier(accy_d->bcmpmu,
-					PMU_CHRGR_DET_EVT_OUT_XCVR,
-					&accy_d->xceiv_start);
+	if (en){
+		ret = regulator_enable(accy_d->regl_bc);
+		if (ret) {
+			pr_acd(ERROR, "Failed to enable BC Detect regulator\n");
+		} else {
+			usleep_range(2000, 5000);
+			regulator_set_mode(accy_d->regl_bc,
+						REGULATOR_MODE_IDLE);
 		}
-
-	}
-	if (en) {
-		if (!accy_d->clock_en)
-			enable_bc_clock(accy_d, true);
-#ifdef CONFIG_HAS_WAKELOCK
-		if (!wake_lock_active
-				(&accy_d->wake_lock))
-			wake_lock(&accy_d->wake_lock);
-#endif
 	} else {
-		if (accy_d->clock_en)
-			enable_bc_clock(accy_d, false);
-#ifdef CONFIG_HAS_WAKELOCK
-		if (wake_lock_active(&accy_d->wake_lock))
-			wake_unlock(&accy_d->wake_lock);
-#endif
+		regulator_disable(accy_d->regl_bc);
 	}
 
+	regulator_put(accy_d->regl_bc);
 }
+
 
 static void bcmpmu_notify_charger_state(struct accy_det *accy_d)
 {
-	pr_acd(FLOW, "===chrgr_type %d\n", accy_d->chrgr_type);
+	pr_acd(VERBOSE, "===chrgr_type %d\n", accy_d->chrgr_type);
 	bcmpmu_accy_chrgr_type_notify(accy_d->chrgr_type);
 }
 
 static void bcmpmu_accy_handle_state(struct accy_det *accy_d)
 {
-	pr_acd(FLOW, "=== %s state %d\n", __func__, accy_d->state);
+	pr_acd(VERBOSE, "=== %s state %d\n", __func__, accy_d->state);
 	switch (accy_d->state) {
 
 	case STATE_IDLE:
 		cancel_delayed_work(&accy_d->d_work);
-		bcmpm_accy_setup_detection(accy_d, 0);
 		accy_d->retry_cnt = 0;
 		break;
 
 	case STATE_CONNECTED:
 		pr_acd(FLOW, "*** Charger Connected event\n");
 		accy_d->retry_cnt = 0;
-		bcm_hsotgctrl_bc_enable_sw_ovwr();
-		bcmpmu_accy_set_pmu_BC12(accy_d->bcmpmu, 0);
+		if (accy_d->chrgr_type != PMU_CHRGR_TYPE_DCP)
+			bcm_hsotgctrl_bc_enable_sw_ovwr();
 		bcmpmu_notify_charger_state(accy_d);
 		break;
 
@@ -402,8 +380,11 @@ static void bcmpmu_accy_handle_state(struct accy_det *accy_d)
 		accy_d->retry_cnt = 0;
 		accy_d->state = STATE_IDLE;
 		accy_d->chrgr_type = PMU_CHRGR_TYPE_NONE;
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_timeout(&accy_d->notify_wake_lock,
+				DISCONNECT_EVENT_TIME);
+#endif
 		bcmpmu_notify_charger_state(accy_d);
-		bcmpmu_accy_set_pmu_BC12(accy_d->bcmpmu, 1);
 		bcdldo_cycle_power(accy_d);
 		reset_bc(accy_d);
 		break;
@@ -434,6 +415,7 @@ static int bcmpmu_accy_event_handler(struct notifier_block *nb,
 		accy_d = container_of(nb,
 			struct accy_det, chrgr_latch_event);
 		accy_d->act = ACT_ACCY_IN;
+		accy_d->retry_cnt = 0;
 		break;
 	case PMU_ACCY_EVT_OUT_USB_RM:
 		accy_d = container_of(nb,
@@ -446,10 +428,11 @@ static int bcmpmu_accy_event_handler(struct notifier_block *nb,
 		bcmpmu_usb_get(accy_d->bcmpmu,
 				BCMPMU_USB_CTRL_GET_ID_VALUE,
 				(void *)&id_status);
-		 if (id_status != PMU_USB_ID_FLOAT)
+		if (id_status != PMU_USB_ID_FLOAT)
 			accy_d->act = ACT_ACCY_IN;
-		 else
+		else
 			ret = 1;
+		accy_d->retry_cnt = 0;
 		break;
 	default:
 		ret = -1;
@@ -457,12 +440,17 @@ static int bcmpmu_accy_event_handler(struct notifier_block *nb,
 		break;
 	}
 	if (!ret) {
-		if (!queue_delayed_work(accy_d->wq,
-				&accy_d->d_work, ACD_DELAY)) {
+		if (queue_delayed_work(accy_d->wq,
+				&accy_d->d_work, 0)) {
+#ifdef CONFIG_HAS_WAKELOCK
+			wake_lock(&accy_d->wake_lock);
+#endif
+		} else {
 			cancel_delayed_work_sync(&accy_d->d_work);
 			queue_delayed_work(accy_d->wq, &accy_d->d_work, 0);
 		}
 	}
+
 	return 0;
 }
 
@@ -474,10 +462,9 @@ static void bcmpmu_detect_wq(struct work_struct *work)
 		container_of(work, struct accy_det, d_work.work);
 	struct bcmpmu59xxx *bcmpmu = accy_d->bcmpmu;
 
-	pr_acd(FLOW, "=== %s\n", __func__);
+	pr_acd(VERBOSE, "=== %s\n", __func__);
 
 	accy_d->reschedule = false;
-
 	if ((accy_d->act == ACT_ACCY_IN || accy_d->act == ACT_ACCY_PROBE) &&
 			(accy_d->state != STATE_CONNECTED)) {
 
@@ -489,15 +476,15 @@ static void bcmpmu_detect_wq(struct work_struct *work)
 			goto exit;
 		}
 
-		bcmpm_accy_setup_detection(accy_d, 1);
+		enable_bc_clock(accy_d, true);
 		accy_d->state = STATE_DETECT;
 		state = bcmpmu_accy_detect_func(accy_d);
+		enable_bc_clock(accy_d, false);
 
 		if (state >= 0) {
 			accy_d->state = state;
-			pr_acd(FLOW, "*** accy updated state %d\n",
+			pr_acd(VERBOSE, "*** accy updated state %d\n",
 					accy_d->state);
-			bcmpm_accy_setup_detection(accy_d, 0);
 			bcmpmu_accy_handle_state(accy_d);
 		} else {
 			reset_bc(accy_d);
@@ -517,6 +504,12 @@ exit:
 	if (accy_d->reschedule)
 		queue_delayed_work(accy_d->wq,
 				&accy_d->d_work, ACD_RETRY_DELAY);
+	else {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_unlock(&accy_d->wake_lock);
+#endif
+	}
+
 }
 
 #if CONFIG_PM
@@ -531,7 +524,7 @@ static int bcmpmu_accy_detect_suspend(struct platform_device *pdev,
 	struct bcmpmu59xxx *bcmpmu = dev_get_drvdata(pdev->dev.parent);
 	struct accy_det *accy_d;
 	accy_d = bcmpmu->accy_d;
-	flush_delayed_work_sync(&accy_d->d_work);
+	flush_delayed_work(&accy_d->d_work);
 	return 0;
 }
 
@@ -566,11 +559,6 @@ static int __devinit bcmpmu_accy_detect_probe(struct platform_device *pdev)
 	ret = bcmpmu_add_notifier(PMU_ACCY_EVT_OUT_CHGDET_LATCH,
 						&accy_d->chrgr_latch_event);
 
-        if (ret) {
-		pr_acd(INIT, "%s, failed on chrgr_latch event notifier, err=%d\n",
-				__func__, ret);
-		goto err;
-	}
 	accy_d->chrgr_rm_event.notifier_call = bcmpmu_accy_event_handler;
 	ret |= bcmpmu_add_notifier(PMU_ACCY_EVT_OUT_USB_RM,
 						&accy_d->chrgr_rm_event);
@@ -598,7 +586,10 @@ static int __devinit bcmpmu_accy_detect_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&accy_d->d_work, bcmpmu_detect_wq);
 
 #ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_init(&accy_d->wake_lock, WAKE_LOCK_SUSPEND, "accy_detect");
+	wake_lock_init(&accy_d->wake_lock,
+		WAKE_LOCK_SUSPEND, "accy_detect");
+	wake_lock_init(&accy_d->notify_wake_lock,
+		WAKE_LOCK_SUSPEND, "notify_lock");
 #endif
 	accy_d_set_ldo_bit(accy_d, 1);
 	bcmpmu_accy_set_pmu_BC12(accy_d->bcmpmu, 1);
@@ -613,9 +604,6 @@ static int __devinit bcmpmu_accy_detect_probe(struct platform_device *pdev)
 	atomic_set(&drv_init_done, 1);
 	return ret;
 err:
-	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_CHGDET_LATCH, &accy_d->chrgr_latch_event);	
-	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_USB_RM, &accy_d->chrgr_rm_event);	
-	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_ID_CHANGE, &accy_d->id_change_event);		
 	kfree(accy_d);
 	return ret;
 }
