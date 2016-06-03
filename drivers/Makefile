@@ -146,6 +146,3 @@ obj-$(CONFIG_MOBICORE_DRIVER)	+= gud/
 
 obj-$(CONFIG_GATOR)             += gator/
 
-ifeq (1, $(shell if [ -d $(srctree)/drivers/exfat ] ; then echo 1 ; fi))
-obj-y                           += exfat/
-endif
