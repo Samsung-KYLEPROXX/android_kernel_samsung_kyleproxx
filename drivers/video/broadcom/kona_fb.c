@@ -60,6 +60,12 @@
 #include "lcd/display_drv.h"
 #include "lcd/lcd.h"
 
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#if defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
+#include <linux/input/doubletap2wake.h>
+#endif
+#endif
+
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
@@ -962,6 +968,13 @@ static void kona_fb_early_suspend(struct early_suspend *h)
 		konafb_error("Early suspend with the wrong level!\n");
 		break;
 	}
+
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#if defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
+dt2w_scr_suspended = true;
+#endif
+#endif
+
 }
 
 static void kona_fb_late_resume(struct early_suspend *h)
@@ -1042,6 +1055,12 @@ static void kona_fb_late_resume(struct early_suspend *h)
 		konafb_error("Early suspend with the wrong level!\n");
 		break;
 	}
+
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#if defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
+dt2w_scr_suspended = false;
+#endif
+#endif
 
 }
 #endif

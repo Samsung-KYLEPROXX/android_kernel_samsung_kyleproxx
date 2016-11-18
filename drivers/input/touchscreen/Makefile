@@ -88,6 +88,7 @@ obj-$(CONFIG_TOUCHSCREEN_BT432_LOGAN)	+= zinitix_touch_logan.o
 obj-$(CONFIG_TOUCHSCREEN_F761)	+= silabs_f760.o bl_master.o
 obj-$(CONFIG_TOUCHSCREEN_MMS134S) += melfas_ts.o MMS100S_ISC_Updater_V01.o MMS100S_ISC_Updater_Customize.o
 obj-$(CONFIG_TOUCHSCREEN_IST30XX) += ist30xx_update.o ist30xx.o ist30xx_misc.o ist30xx_sys.o ist30xx_factory.o ist30xx_tracking.o
+obj-$(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE) += doubletap2wake.o
 obj-$(CONFIG_KEYBOARD_TC360_TOUCHKEY)  += coreriver_touchkey/
 obj-$(CONFIG_TOUCHSCREEN_CYPRESS_TMA46X)	+= TMA463/
 obj-$(CONFIG_TOUCHSCREEN_MELFAS_MMS144)		+= MMS144/

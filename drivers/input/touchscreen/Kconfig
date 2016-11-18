@@ -1034,6 +1034,17 @@ config TOUCHSCREEN_IST30XX
           To compile this driver as a module, choose M here: the
           module will be called ist30xx.          
 
+config TOUCHSCREEN_DOUBLETAP2WAKE
+        tristate "DoubleTap2Wake for touchscreens"
+        select TOUCHSCREEN_PREVENT_SLEEP
+        default n
+
+config TOUCHSCREEN_PREVENT_SLEEP
+        bool "Inihibit sleep on modified touchscreen drivers"
+        default n
+        help
+        This disables the sleep function of modified touchscreen drivers.
+
 source "drivers/input/touchscreen/coreriver_touchkey/Kconfig"
 source "drivers/input/touchscreen/TMA463/Kconfig"
 source "drivers/input/touchscreen/MMS144/Kconfig"

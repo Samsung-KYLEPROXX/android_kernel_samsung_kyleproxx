@@ -40,6 +40,15 @@
 
 #include <linux/input/mt.h>
 
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+#include <linux/input/doubletap2wake.h>
+#endif
+#endif
+#if !defined(CONFIG_TOUCHSCREEN_PREVENT_SLEEP) && !defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
+int dt2w_switch = 0;
+#endif
+
 #define MAX_ERR_CNT             (100)
 
 static char IsfwUpdate[20]={0};
@@ -967,21 +976,41 @@ void tsp_printk(int level, const char *fmt, ...)
 
 void ist30xx_disable_irq(struct ist30xx_data *data)
 {
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+		if (dt2w_switch == 1) {
+			enable_irq_wake(data->client->irq);
+		} else if (dt2w_switch == 0) {
+	#endif
 	if (data->irq_enabled) {
 		ist30xx_tracking(TRACK_INTR_ENABLE);
 		disable_irq(data->client->irq);
 		data->irq_enabled = 0;
 	}
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+		} else {
+			pr_info("No valid input found");
+		}
+	#endif
 }
 
 void ist30xx_enable_irq(struct ist30xx_data *data)
 {
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+		if (dt2w_switch == 1) {
+			disable_irq_wake(data->client->irq);
+		} else if (dt2w_switch == 0) {
+	#endif
 	if (!data->irq_enabled) {
 		ist30xx_tracking(TRACK_INTR_DISABLE);
 		enable_irq(data->client->irq);
 		msleep(10);
 		data->irq_enabled = 1;
 	}
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+		} else {
+			pr_info("No valid input found");
+		}
+	#endif
 }
 
 
@@ -2183,7 +2212,11 @@ static int __devinit ist30xx_probe(struct i2c_client *		client,
 
 
 	ret = request_threaded_irq(client->irq, NULL, irq_thread_func,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "ist30xx_ts", data);
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+				IRQF_TRIGGER_FALLING | IRQF_ONESHOT | IRQF_NO_SUSPEND, "ist30xx_ts", data);
+	#else
+				IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "ist30xx_ts", data);
+	#endif
 	if (ret)
 		goto err_irq;
 
