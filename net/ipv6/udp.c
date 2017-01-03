@@ -352,10 +352,10 @@ int udpv6_recvmsg(struct kiocb *iocb, struct sock *sk,
 		*addr_len=sizeof(struct sockaddr_in6);
 
 	if (flags & MSG_ERRQUEUE)
-		return ipv6_recv_error(sk, msg, len, addr_len);
+		return ipv6_recv_error(sk, msg, len);
 
 	if (np->rxpmtu && np->rxopt.bits.rxpmtu)
-		return ipv6_recv_rxpmtu(sk, msg, len, addr_len);
+		return ipv6_recv_rxpmtu(sk, msg, len);
 
 try_again:
 	skb = __skb_recv_datagram(sk, flags | (noblock ? MSG_DONTWAIT : 0),

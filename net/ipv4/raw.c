@@ -693,7 +693,7 @@ static int raw_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		*addr_len = sizeof(*sin);
 
 	if (flags & MSG_ERRQUEUE) {
-		err = ip_recv_error(sk, msg, len, addr_len);
+		err = ip_recv_error(sk, msg, len);
 		goto out;
 	}
 
