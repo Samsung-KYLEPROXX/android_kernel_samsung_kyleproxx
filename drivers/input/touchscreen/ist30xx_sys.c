@@ -21,6 +21,14 @@
 #include <asm/unaligned.h>
 
 #include "ist30xx.h"
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+#include <linux/input/doubletap2wake.h>
+#endif
+#endif
+#if !defined(CONFIG_TOUCHSCREEN_PREVENT_SLEEP) && !defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
+int dt2w_switch = 0;
+#endif
 
 /******************************************************************************
  * Return value of Error
@@ -226,6 +234,22 @@ int ist30xx_power_on(void)
 
 int ist30xx_power_off(void)
 {
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+		if (dt2w_switch == 1) {
+			if (ts_data->status.power != 0) {
+			ts_power_enable(0);
+			ts_data->status.power = 0;
+			tsp_info("%s\n", __func__);
+			}
+		mdelay(100);
+			if (ts_data->status.power != 1) {
+			ts_power_enable(1);
+		msleep(30);
+			ts_data->status.power = 1;
+			tsp_info("%s\n", __func__);
+			}
+		} else if (dt2w_switch == 0) {
+	#endif
 	if (ts_data->status.power != 0) {
 		/* VDDIO disable */
 		/* VDD disable */
@@ -233,6 +257,11 @@ int ist30xx_power_off(void)
 		ts_data->status.power = 0;
 		tsp_info("%s\n", __func__);
 	}
+	#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+		} else {
+			pr_info("No valid input found");
+		}
+	#endif
 
 	return 0;
 }
